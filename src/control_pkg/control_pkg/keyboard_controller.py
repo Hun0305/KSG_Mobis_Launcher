@@ -22,7 +22,8 @@ class KeyboardController(Node):
             sys.exit(1)
 
         # --- 저장 디렉토리 설정 ---
-        self.save_dir = '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/lane2'
+        # 현재 스크립트 파일의 위치를 기준으로 상대경로 설정
+        self.save_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'camera_pkg', 'camera_pkg', 'lib', 'lane2')
         os.makedirs(self.save_dir, exist_ok=True)
 
         # --- 이미지 인덱스 초기화 ---
