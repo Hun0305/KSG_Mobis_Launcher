@@ -12,8 +12,7 @@ from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReli
 # ===== 사용자 설정 =====
 DATA_SOURCE = 'camera'  # camera, image, video 중 하나
 CAM_NUM = 0
-# 현재 스크립트 파일의 디렉토리를 기준으로 상대경로 설정
-IMAGE_DIRECTORY_PATH = os.path.join(os.path.dirname(__file__), 'lib', 'lane2')
+IMAGE_DIRECTORY_PATH = '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/lane2'
 VIDEO_FILE_PATH = '/absolute/path/to/your/video.mp4'
 SHOW_IMAGE = True
 TIMER = 0.03
