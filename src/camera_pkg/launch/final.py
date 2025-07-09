@@ -6,10 +6,11 @@ from launch.actions import SetEnvironmentVariable
 def generate_launch_description():
     return LaunchDescription([
         #################### CAMERA1(LANE) ######################
+        
         Node(
             package='camera_pkg',
             executable='image',  # 실행할 노드 파일명
-            name='camera0',
+            name='cam0',
             namespace='cam0',
             parameters=[
                 {'data_source': 'image'},  # camera, video, image 선택
@@ -20,8 +21,25 @@ def generate_launch_description():
                 {'timer_period': 0.03},  # float형으로, fps조절 
             ]
         ),
+
+        #################### CAMERA2(Traffic_light) ######################
         
-        #################### YOLO SEG ######################
+        Node(
+            package='camera_pkg',
+            executable='image',  # 실행할 노드 파일명
+            name='cam1',
+            namespace='cam1',
+            parameters=[
+                {'data_source': 'image'},  # camera, video, image 선택
+                {'cam_num': 2},
+                {'pub_topic': '/cam1/image_raw'},
+                {'window_name': 'Raw 0'},
+                {'show_image': False},
+                {'timer_period': 0.03},  # float형으로, fps조절 
+            ]
+        ),
+        
+        #################### CAMERA1 YOLO SEG ######################
         SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', '0'),
         Node(
             package='camera_pkg',
@@ -39,13 +57,31 @@ def generate_launch_description():
                 ('detections', '/cam0/detections')  # YOLO가 감지한 결과를 detections에 퍼블리시
             ]
         ),
-        
 
-        #################### LANE DETECT ######################
+        #################### CAMERA2 YOLO SEG ######################
+        SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', '0'),
         Node(
             package='camera_pkg',
-            executable='lane',  # 차선 감지 노드
-            name='lane_detector_cam0',
+            executable='yolo_seg',  
+            name='yolo_seg1',
+            namespace='cam1',
+            output='screen',
+            parameters=[
+                {'device': 'cuda:0'},
+                {'model_path': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best.pt'},
+                {'threshold': 0.5}
+            ],
+            remappings=[
+                ('image_raw', '/cam1/image_raw'),  # 카메라의 image_raw 토픽과 매핑
+                ('detections', '/cam1/detections')  # YOLO가 감지한 결과를 detections에 퍼블리시
+            ]
+        ),
+
+        #################### STOP LINE DETECT ######################
+        Node(
+            package='camera_pkg',
+            executable='stop_line',  
+            name='stop_line',
             namespace='cam0',
             parameters=[
                 {'camera_topic': '/cam0/image_raw'},
@@ -54,18 +90,42 @@ def generate_launch_description():
             output='screen'
         ),
         
+
+        #################### LANE DETECT ######################
+        Node(
+            package='camera_pkg',
+            executable='lane',  
+            name='lane_detector_cam0',
+            namespace='cam0',
+            parameters=[
+                {'camera_topic': '/cam0/image_raw'},
+                {'detection_topic': '/cam0/detections'}
+            ],
+            output='screen'
+        ),
+
+        #################### TRAFFIC LIGHT DETECT ######################
+        Node(
+            package='camera_pkg',
+            executable='traffic_light',
+            name='traffic_light',
+            output='screen',
+            parameters=[]
+        ),
+        
+        
         #################### MOTION ######################
         Node(
-            package='decision_making_pkg',  # motion 패키지
-            executable='motion',  # 실행할 motion 노드
+            package='decision_making_pkg',  
+            executable='motion',  
             name='motion_node',
             output='screen'
         ),
         
         #################### CONTROL ######################
         Node(
-            package='control_pkg',  # control 패키지
-            executable='control',  # 실행할 control 노드
+            package='control_pkg',  
+            executable='control',  
             name='control_node',
             output='screen'
         )

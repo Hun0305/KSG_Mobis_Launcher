@@ -22,8 +22,8 @@ class StopLineNode(Node):
             depth=1
         )
 
-        self.image_sub = Subscriber(self, Image, '/cam0/image_raw', qos)
-        self.detection_sub = Subscriber(self, DetectionArray, '/cam0/detections', qos)
+        self.image_sub = Subscriber(self, Image, '/cam0/image_raw', qos_profile=qos)
+        self.detection_sub = Subscriber(self, DetectionArray, '/cam0/detections', qos_profile=qos)
 
         self.ts = ApproximateTimeSynchronizer(
             [self.image_sub, self.detection_sub],
@@ -41,10 +41,10 @@ class StopLineNode(Node):
                 found_stop_line = True
                 break
 
-        if found_stop_line:
-            self.get_logger().info("🟥 Stop line detected!")
-        else:
-            self.get_logger().info("⬜ No stop line detected.")
+        # if found_stop_line:
+        #     self.get_logger().info("🟥 Stop line detected!")
+        # else:
+        #     self.get_logger().info("⬜ No stop line detected.")
 
 
 def main(args=None):
