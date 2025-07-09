@@ -1,8 +1,13 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable, TimerAction
+import os
 
 def generate_launch_description():
+    # 현재 launch 파일의 위치를 기준으로 모델 파일 경로 설정
+    launch_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(launch_dir, '..', 'camera_pkg', 'model', 'best.pt')
+    
     return LaunchDescription([
         
         
@@ -34,7 +39,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'device': 'cuda:0'},
-                {'model_path': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best.pt'},
+                {'model_path': model_path},
                 {'threshold': 0.5}
             ],
             remappings=[

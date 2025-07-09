@@ -18,7 +18,9 @@ class YoloSegNode(Node):
         super().__init__('yolo_seg')
         #self.get_logger().info("🟠 image_raw 구독 설정 완료")
 
-        self.declare_parameter("model_path", "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/yolo11n-seg.pt")
+        # 현재 스크립트 파일의 디렉토리를 기준으로 상대경로 설정
+        default_model_path = os.path.join(os.path.dirname(__file__), 'model', 'yolo11n-seg.pt')
+        self.declare_parameter("model_path", default_model_path)
         self.declare_parameter("device", "cuda:0")
         self.declare_parameter("threshold", 0.3)
 
