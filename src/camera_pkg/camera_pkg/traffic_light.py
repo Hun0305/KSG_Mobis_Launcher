@@ -12,12 +12,12 @@ from cv_bridge import CvBridge
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 
-class MultiTrafficLightNode(Node):
+class TrafficLightNode(Node):
     def __init__(self):
-        super().__init__('multi_traffic_light_node')
+        super().__init__('traffic_light_node')
 
         self.bridge = CvBridge()
-        self.last_status = None  # 🟡 마지막 상태 저장 변수 추가
+        self.last_status = None
 
         qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
@@ -26,13 +26,11 @@ class MultiTrafficLightNode(Node):
             depth=1
         )
 
-        self.image0_sub = Subscriber(self, Image, '/cam0/image_raw', qos_profile=qos)
-        self.detection0_sub = Subscriber(self, DetectionArray, '/cam0/detections', qos_profile=qos)
-        self.image1_sub = Subscriber(self, Image, '/cam1/image_raw', qos_profile=qos)
-        self.detection1_sub = Subscriber(self, DetectionArray, '/cam1/detections', qos_profile=qos)
+        self.image_sub = Subscriber(self, Image, '/cam1/image_raw', qos_profile=qos)
+        self.detection_sub = Subscriber(self, DetectionArray, '/cam1/detections', qos_profile=qos)
 
         self.ts = ApproximateTimeSynchronizer(
-            [self.image0_sub, self.detection0_sub, self.image1_sub, self.detection1_sub],
+            [self.image_sub, self.detection_sub],
             queue_size=10,
             slop=0.5
         )
@@ -47,31 +45,21 @@ class MultiTrafficLightNode(Node):
             'green': (np.array([40, 100, 95]), np.array([90, 255, 255]))
         }
 
-    def sync_callback(self, img0, det0, img1, det1):
-        cv_img0 = self.bridge.imgmsg_to_cv2(img0, desired_encoding='bgr8')
-        cv_img1 = self.bridge.imgmsg_to_cv2(img1, desired_encoding='bgr8')
+    def sync_callback(self, img_msg, det_msg):
+        cv_img = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
+        status = self.detect_traffic_light_color(cv_img, det_msg)
 
-        status0 = self.detect_traffic_light_color(cv_img0, det0)
-        status1 = self.detect_traffic_light_color(cv_img1, det1)
-
-        if status0 == 'Red' or status1 == 'Red':
-            result = 'Red'
-        elif status0 == 'None' and status1 == 'None':
-            result = 'None'
-        else:
-            result = 'Not_Red'
-
-        # ✅ 상태가 바뀌었을 때만 로그 출력
-        if result != self.last_status:
-            msg = String()
-            msg.data = result
-            self.pub.publish(msg)
-            self.get_logger().info(f'🟢 Traffic Light Status changed: {result}')
-            self.last_status = result
+        if result := status:  # Python 3.8+ walrus operator
+            if result != self.last_status:
+                msg = String()
+                msg.data = result
+                self.pub.publish(msg)
+                self.get_logger().info(f'🟢 Traffic Light Status changed: {result}')
+                self.last_status = result
 
     def detect_traffic_light_color(self, image, detections: DetectionArray):
         for det in detections.detections:
-            if det.class_name == 'tarffic_light':
+            if det.class_name == 'tarffic_light':  # ← 오타라면 'traffic_light'로 고쳐야 함
                 cx = int(det.bbox.center.position.x)
                 cy = int(det.bbox.center.position.y)
                 w = int(det.bbox.size.x)
@@ -108,7 +96,7 @@ class MultiTrafficLightNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MultiTrafficLightNode()
+    node = TrafficLightNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -120,5 +108,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-

@@ -41,10 +41,9 @@ class StopLineNode(Node):
                 found_stop_line = True
                 break
 
-        # if found_stop_line:
-        #     self.get_logger().info("🟥 Stop line detected!")
-        # else:
-        #     self.get_logger().info("⬜ No stop line detected.")
+        if found_stop_line:
+            self.get_logger().info("🟥 Stop line detected!")
+        
 
 
 def main(args=None):

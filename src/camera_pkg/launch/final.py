@@ -15,6 +15,7 @@ def generate_launch_description():
             parameters=[
                 {'data_source': 'image'},  # camera, video, image 선택
                 {'cam_num': 2},
+                {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/lane2'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
@@ -32,10 +33,11 @@ def generate_launch_description():
             parameters=[
                 {'data_source': 'image'},  # camera, video, image 선택
                 {'cam_num': 2},
+                {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/traffic_light'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
-                {'timer_period': 0.03},  # float형으로, fps조절 
+                {'timer_period': 1.0},  # float형으로, fps조절 
             ]
         ),
         
