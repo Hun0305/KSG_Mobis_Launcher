@@ -5,9 +5,10 @@ from launch.actions import SetEnvironmentVariable
 import os
 
 def generate_launch_description():
-    # 현재 launch 파일의 위치를 기준으로 모델 파일 경로 설정
-    model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best.pt"
-    
+     # 각 카메라에 맞는 모델 경로
+    cam0_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best.pt"
+    cam1_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best_old.pt"
+
     return LaunchDescription([
         #################### CAMERA1(LANE) ######################
         
@@ -55,7 +56,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'device': 'cuda:0'},
-                {'model_path': model_path},
+                {'model_path': cam0_model_path},
                 {'threshold': 0.5}
             ],
             remappings=[
@@ -74,7 +75,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'device': 'cuda:0'},
-                {'model_path': model_path},
+                {'model_path': cam1_model_path},
                 {'threshold': 0.5}
             ],
             remappings=[

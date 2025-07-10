@@ -128,25 +128,36 @@ class LaneDetector(Node):
                     vehicle_offset = avg_lane_x - vehicle_x
                 else:
                     vehicle_offset = 0
-
+                
+                #뽑아내야되는정보^^
                 msg = LaneInfo()
                 msg.steering_angle = angle
                 msg.lane_num = lane_num
                 msg.vehicle_position_x = vehicle_offset
                 self.lane_pub.publish(msg)
 
-                vis = bird.copy()
-                vis[results[closest]['centerline'] == 255] = [0, 255, 0]
-                self.viz_pub.publish(self.bridge.cv2_to_imgmsg(vis, 'bgr8'))
+            # 시각화: lane1 + lane2 모두 보여주기
+            vis = bird.copy()
+            for name in ['lane1', 'lane2']:
+                if name in results:
+                    vis[results[name]['centerline'] == 255] = [0, 255, 0]
+            self.viz_pub.publish(self.bridge.cv2_to_imgmsg(vis, 'bgr8'))
 
-                g = cv2.cvtColor(results[closest]['gray'], cv2.COLOR_GRAY2BGR)
-                e = cv2.cvtColor(results[closest]['edges'], cv2.COLOR_GRAY2BGR)
-                c = cv2.cvtColor(results[closest]['centerline'], cv2.COLOR_GRAY2BGR)
-                debug = np.hstack([g, e, c])
+            # 디버그 이미지: 각 lane의 gray, edge, centerline 보여주기
+            debug_rows = []
+            for name in ['lane1', 'lane2']:
+                if name in results:
+                    g = cv2.cvtColor(results[name]['gray'], cv2.COLOR_GRAY2BGR)
+                    e = cv2.cvtColor(results[name]['edges'], cv2.COLOR_GRAY2BGR)
+                    c = cv2.cvtColor(results[name]['centerline'], cv2.COLOR_GRAY2BGR)
+                    debug_rows.append(np.hstack([g, e, c]))
+            if debug_rows:
+                debug = np.vstack(debug_rows)
                 self.debug_pub.publish(self.bridge.cv2_to_imgmsg(debug, 'bgr8'))
 
         except Exception as e:
             self.get_logger().error(f"Error in sync_callback: {e}")
+
 
 def main(args=None):
     rclpy.init(args=args)
