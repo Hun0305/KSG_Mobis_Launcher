@@ -47,19 +47,20 @@ class TrafficLightNode(Node):
 
     def sync_callback(self, img_msg, det_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-        status = self.detect_traffic_light_color(cv_img, det_msg)
+        detected, area = self.detect_traffic_light_color(cv_img, det_msg)
 
-        if result := status:  # Python 3.8+ walrus operator
-            if result != self.last_status:
-                msg = String()
-                msg.data = result
-                self.pub.publish(msg)
-                self.get_logger().info(f'🟢 Traffic Light Status changed: {result}')
-                self.last_status = result
+        status_msg = f"Detected: {detected}, Area: {area}"
+        if status_msg != self.last_status:
+            msg = String()
+            msg.data = status_msg
+            self.pub.publish(msg)
+            # self.get_logger().info(f'🟢 Traffic Light Result → {status_msg}')
+            self.last_status = status_msg
+
 
     def detect_traffic_light_color(self, image, detections: DetectionArray):
         for det in detections.detections:
-            if det.class_name == 'tarffic_light':  # ← 오타라면 'traffic_light'로 고쳐야 함
+            if det.class_name == 'tarffic_light':
                 cx = int(det.bbox.center.position.x)
                 cy = int(det.bbox.center.position.y)
                 w = int(det.bbox.size.x)
@@ -81,17 +82,15 @@ class TrafficLightNode(Node):
                     self.get_logger().warn(f"⚠️ cvtColor failed: {e}")
                     continue
 
-                masks = {
-                    k: cv2.inRange(hsv, self.hsv_ranges[k][0], self.hsv_ranges[k][1])
-                    for k in self.hsv_ranges
-                }
+                red_mask = (
+                    cv2.inRange(hsv, self.hsv_ranges['red1'][0], self.hsv_ranges['red1'][1]) +
+                    cv2.inRange(hsv, self.hsv_ranges['red2'][0], self.hsv_ranges['red2'][1])
+                )
+                area = w * h
+                return True, area  # 감지된 경우
 
-                red_mask = masks['red1'] + masks['red2']
-                if cv2.countNonZero(red_mask) > 50:
-                    return 'Red'
-                return 'Not_Red'
+        return False, 0  # 감지 안 된 경우
 
-        return 'None'
 
 
 def main(args=None):

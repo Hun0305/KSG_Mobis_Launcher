@@ -84,17 +84,17 @@ def generate_launch_description():
         ),
 
         #################### STOP LINE DETECT ######################
-        Node(
-            package='camera_pkg',
-            executable='stop_line',  
-            name='stop_line',
-            namespace='cam0',
-            parameters=[
-                {'camera_topic': '/cam0/image_raw'},
-                {'detection_topic': '/cam0/detections'}
-            ],
-            output='screen'
-        ),
+        # Node(
+        #     package='camera_pkg',
+        #     executable='stop_line',  
+        #     name='stop_line',
+        #     namespace='cam0',
+        #     parameters=[
+        #         {'camera_topic': '/cam0/image_raw'},
+        #         {'detection_topic': '/cam0/detections'}
+        #     ],
+        #     output='screen'
+        # ),
         
 
         #################### LANE DETECT ######################
