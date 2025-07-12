@@ -186,7 +186,7 @@ class LaneDetector(Node):
                 bx=c_full[-1][0]; mid=w//2
                 vx=mid-bx
             else:
-                vx=0
+                vx=9999
             infos.append((ang_deg,idx,vx))
             # draw center line
             if len(c_full)>1:

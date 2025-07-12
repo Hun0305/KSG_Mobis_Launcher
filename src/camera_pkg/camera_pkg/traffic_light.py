@@ -61,7 +61,7 @@ class TrafficLightNode(Node):
 
     def detect_traffic_light_color(self, image, detections: DetectionArray):
         for det in detections.detections:
-            if det.class_name == 'tarffic_light':
+            if det.class_name == 'traffic_light':
                 cx = int(det.bbox.center.position.x)
                 cy = int(det.bbox.center.position.y)
                 w = int(det.bbox.size.x)
