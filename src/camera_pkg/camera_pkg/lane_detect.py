@@ -7,20 +7,18 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 import cv2
 import numpy as np
-import math
 
 class LaneDetector(Node):
     def __init__(self):
         super().__init__('lane_detector')
+        # 파라미터 선언 및 기본값
         self.declare_parameter('camera_topic', 'image_raw')
         self.declare_parameter('detection_topic', 'detections')
-        self.declare_parameter('persp_src', [0.1, 1.0, 0.9, 1.0, 0.6, 0.4, 0.4, 0.4])
-        self.declare_parameter('persp_dst', [0.3, 1.0, 0.7, 1.0, 0.7, 0.0, 0.3, 0.0])
-        self.declare_parameter('morph_kernel_size', 11)
-        self.declare_parameter('canny_thresholds', [50, 150])
+        self.declare_parameter('persp_src', [0.1,1.0,0.9,1.0,0.6,0.4,0.4,0.4])
+        self.declare_parameter('persp_dst', [0.3,1.0,0.7,1.0,0.7,0.0,0.3,0.0])
 
-        camera_topic = self.get_parameter('camera_topic').value
-        detection_topic = self.get_parameter('detection_topic').value
+        cam_topic = self.get_parameter('camera_topic').value
+        det_topic = self.get_parameter('detection_topic').value
         qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -28,147 +26,191 @@ class LaneDetector(Node):
             depth=1
         )
 
+        # CvBridge 및 토픽 설정
         self.bridge = CvBridge()
-        image_sub = Subscriber(self, Image, camera_topic, qos_profile=qos)
-        det_sub = Subscriber(self, DetectionArray, detection_topic, qos_profile=qos)
-        self.ts = ApproximateTimeSynchronizer([image_sub, det_sub], queue_size=10, slop=0.3)
+        img_sub = Subscriber(self, Image, cam_topic, qos_profile=qos)
+        det_sub = Subscriber(self, DetectionArray, det_topic, qos_profile=qos)
+        self.ts = ApproximateTimeSynchronizer([img_sub, det_sub], queue_size=10, slop=0.3)
         self.ts.registerCallback(self.sync_callback)
 
         self.viz_pub = self.create_publisher(Image, 'lane_viz', qos)
         self.debug_pub = self.create_publisher(Image, 'lane_debug', qos)
-        self.lane_pub = self.create_publisher(LaneInfo, 'lane_info', qos)
+        # LaneInfo 퍼블리셔
+        self.lane_info_pub = self.create_publisher(LaneInfo, 'lane_info', qos)
 
-        self.get_logger().info(f"LaneDetector started on '{camera_topic}' and '{detection_topic}'")
+        # 외삽 및 중앙선 보정 조건
+        self.MIN_POINTS_FOR_CURVE = 5
+        self.MIN_Y_SPAN_FOR_CURVE = 20
+        self.LANE_WIDTH_PIXELS = 350
+        self.EDGE_MARGIN = 1
 
-    def get_perspective_matrix(self, shape):
-        h, w = shape[:2]
-        src = self.get_parameter('persp_src').value
-        dst = self.get_parameter('persp_dst').value
-        src_pts = np.float32([[src[i]*w, src[i+1]*h] for i in range(0, 8, 2)])
-        dst_pts = np.float32([[dst[i]*w, dst[i+1]*h] for i in range(0, 8, 2)])
-        return cv2.getPerspectiveTransform(src_pts, dst_pts)
+        self.get_logger().info(f"LaneDetector initialized: {cam_topic}, {det_topic}")
 
-    def preprocess_mask(self, mask_img):
-        gray = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
-        k = self.get_parameter('morph_kernel_size').value
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-        opened = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel)
-        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
-        blur = cv2.GaussianBlur(closed, (k, k), 0)
-        t_low, t_high = self.get_parameter('canny_thresholds').value
-        edges = cv2.Canny(blur, t_low, t_high)
-        return gray, edges
+    def extrapolate_poly(self, pts, y_min, y_max, degree=2):
+        if len(pts) < degree+1:
+            return []
+        ys = np.array([y for x,y in pts])
+        xs = np.array([x for x,y in pts])
+        coeff = np.polyfit(ys, xs, degree)
+        poly = np.poly1d(coeff)
+        y_extra = np.arange(y_min+1, y_max+1)
+        return [(int(poly(y)), int(y)) for y in y_extra]
 
-    def extract_centerline(self, edges):
-        centerline = np.zeros_like(edges)
-        points = []
-
-        for y in range(edges.shape[0]):
-            xs = np.where(edges[y] > 0)[0]
-            if xs.size >= 2:
-                x_left = xs[0]
-                x_right = xs[-1]
-                center_x = int((x_left + x_right) / 2)
-                centerline[y, center_x-1:center_x+2] = 255
-                points.append((center_x, y))
-
-        return centerline, points
-
-    def compute_angle(self, points):
-        if len(points) < 2:
-            return 0
-        [vx, vy, _, _] = cv2.fitLine(np.array(points), cv2.DIST_L2, 0, 0.01, 0.01)
-        angle_rad = math.atan2(vy, vx)
-        return int(np.degrees(angle_rad))
+    def pick_longest_segment(self, pts):
+        if not pts:
+            return []
+        pts_sorted = sorted(pts, key=lambda p: p[1])
+        segments = []
+        curr = [pts_sorted[0]]
+        for p in pts_sorted[1:]:
+            if p[1] - curr[-1][1] <= 1:
+                curr.append(p)
+            else:
+                segments.append(curr)
+                curr = [p]
+        segments.append(curr)
+        return max(segments, key=lambda s: s[-1][1] - s[0][1])
 
     def sync_callback(self, img_msg, det_msg):
-        try:
-            frame = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-            h, w = frame.shape[:2]
-            M = self.get_perspective_matrix(frame.shape)
-            bird = cv2.warpPerspective(frame, M, (w, h), borderMode=cv2.BORDER_CONSTANT)
+        frame = self.bridge.imgmsg_to_cv2(img_msg, 'bgr8')
+        h, w = frame.shape[:2]
 
-            masks = {'lane1': np.zeros_like(bird), 'lane2': np.zeros_like(bird)}
-            for det in det_msg.detections:
-                if det.class_name not in ['lane1', 'lane2']:
-                    continue
-                pts = np.array([[p.x, p.y] for p in det.mask.data], dtype=np.float32)
-                if pts.shape[0] < 3:
-                    continue
-                wp = cv2.perspectiveTransform(pts[None, :, :], M)[0].astype(int)
-                cv2.fillPoly(masks[det.class_name], [wp], (0, 255, 255))
+        # 1. Masks
+        mask1 = np.zeros((h,w), np.uint8)
+        mask2 = np.zeros((h,w), np.uint8)
+        for det in det_msg.detections:
+            pts = np.array([[int(p.x), int(p.y)] for p in det.mask.data], np.int32)
+            if pts.shape[0] < 3: continue
+            if det.class_name == 'lane1': cv2.fillPoly(mask1, [pts], 255)
+            elif det.class_name == 'lane2': cv2.fillPoly(mask2, [pts], 255)
+        self.debug_pub.publish(self.bridge.cv2_to_imgmsg(cv2.merge([mask1, np.zeros_like(mask1), mask2]), 'bgr8'))
 
-            results = {}
-            for name, mask in masks.items():
-                gray, edges = self.preprocess_mask(mask)
-                centerline, points = self.extract_centerline(edges)
-                results[name] = {'centerline': centerline, 'points': points, 'gray': gray, 'edges': edges}
+        # 2. BEV 변환
+        src = self.get_parameter('persp_src').value
+        dst = self.get_parameter('persp_dst').value
+        src_pts = np.float32([[src[i]*w, src[i+1]*h] for i in range(0,8,2)])
+        dst_pts = np.float32([[dst[i]*w, dst[i+1]*h] for i in range(0,8,2)])
+        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+        bw1 = cv2.warpPerspective(mask1, M, (w,h), flags=cv2.INTER_LINEAR)
+        bw2 = cv2.warpPerspective(mask2, M, (w,h), flags=cv2.INTER_LINEAR)
+        self.debug_pub.publish(self.bridge.cv2_to_imgmsg(cv2.merge([bw1, np.zeros_like(bw1), bw2]), 'bgr8'))
 
-            vehicle_x = w // 2
-            vehicle_y = h - 10
-            min_dist = float('inf')
-            closest = None
-            for name, data in results.items():
-                if not data['points']:
-                    continue
-                dists = [abs(x - vehicle_x) + abs(y - vehicle_y) for x, y in data['points']]
-                if dists:
-                    dist = min(dists)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest = name
+        # 3. Morphology
+        kern = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+        proc1 = cv2.morphologyEx(bw1, cv2.MORPH_CLOSE, kern)
+        proc1 = cv2.morphologyEx(proc1, cv2.MORPH_OPEN, kern)
+        proc2 = cv2.morphologyEx(bw2, cv2.MORPH_CLOSE, kern)
+        proc2 = cv2.morphologyEx(proc2, cv2.MORPH_OPEN, kern)
+        dbg = cv2.merge([proc1, np.zeros_like(proc1), proc2])
+        self.debug_pub.publish(self.bridge.cv2_to_imgmsg(dbg, 'bgr8'))
 
-            if closest:
-                angle = self.compute_angle(results[closest]['points'])
-                lane_num = 1 if closest == 'lane1' else 2
+        # 4. Valid & erosion
+        ones = np.ones((h,w), np.uint8)*255
+        valid = cv2.warpPerspective(ones, M, (w,h), flags=cv2.INTER_NEAREST)>0
+        eroded = cv2.erode(valid.astype(np.uint8), np.ones((3,3), np.uint8), iterations=1).astype(bool)
+        rows = np.where(np.any(valid, axis=1))[0]
+        y_end = rows.max() if rows.size else h
+        y0 = h//2
 
-                bottom_xs = [x for x, y in results[closest]['points'] if abs(y - vehicle_y) < 5]
-                if bottom_xs:
-                    avg_lane_x = int(np.mean(bottom_xs))
-                    vehicle_offset = avg_lane_x - vehicle_x
-                else:
-                    vehicle_offset = 0
-                
-                #뽑아내야되는정보^^
-                msg = LaneInfo()
-                msg.steering_angle = angle
-                msg.lane_num = lane_num
-                msg.vehicle_position_x = vehicle_offset
-                self.lane_pub.publish(msg)
+        bev = dbg.copy()
+        c_colors = [('b1l',c_b1l:=(0,0,255)),('b1r',c_b1r:=(0,165,255)),('b2l',c_b2l:=(255,0,255)),('b2r',c_b2r:=(255,255,0))]
+        c_cent = [(0,255,0),(0,255,255)]
+        bound_c = (42,42,165)
 
-            # 시각화: lane1 + lane2 모두 보여주기
-            vis = bird.copy()
-            for name in ['lane1', 'lane2']:
-                if name in results:
-                    vis[results[name]['centerline'] == 255] = [0, 255, 0]
-            self.viz_pub.publish(self.bridge.cv2_to_imgmsg(vis, 'bgr8'))
+        # outlines
+        inv = (~valid).astype(np.uint8)*255
+        cnts,_ = cv2.findContours(inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in cnts:
+            if cnt[:,:,1].max()<y0: continue
+            cv2.drawContours(bev, [cnt], -1, bound_c, 2)
+        cv2.rectangle(bev, (0,0),(w-1,h-1), bound_c,2)
 
-            # 디버그 이미지: 각 lane의 gray, edge, centerline 보여주기
-            debug_rows = []
-            for name in ['lane1', 'lane2']:
-                if name in results:
-                    g = cv2.cvtColor(results[name]['gray'], cv2.COLOR_GRAY2BGR)
-                    e = cv2.cvtColor(results[name]['edges'], cv2.COLOR_GRAY2BGR)
-                    c = cv2.cvtColor(results[name]['centerline'], cv2.COLOR_GRAY2BGR)
-                    debug_rows.append(np.hstack([g, e, c]))
-            if debug_rows:
-                debug = np.vstack(debug_rows)
-                self.debug_pub.publish(self.bridge.cv2_to_imgmsg(debug, 'bgr8'))
+        # 5. extract raw boundaries
+        raw = {}
+        for key, proc in [('b1l',proc1),('b1r',proc1),('b2l',proc2),('b2r',proc2)]:
+            raw[key] = [(int(xs.min()), y) if 'l' in key else (int(xs.max()),y) \
+                        for y in range(y0,h) if (xs:=np.where(proc[y]>0)[0]).size]
 
-        except Exception as e:
-            self.get_logger().error(f"Error in sync_callback: {e}")
+        # 6. filter & extrapolate
+        b = {k:[] for k in raw}
+        for key in raw:
+            filt = [(x,y) for x,y in raw[key] if eroded[y,x] and y<y_end]
+            seg = self.pick_longest_segment(filt)
+            if any(x<=self.EDGE_MARGIN or x>=w-self.EDGE_MARGIN for x,y in seg):
+                continue
+            ext=[]
+            if len(seg)>=self.MIN_POINTS_FOR_CURVE and max(y for x,y in seg)-min(y for x,y in seg)>=self.MIN_Y_SPAN_FOR_CURVE:
+                ext=self.extrapolate_poly(seg, y_min=max(y for x,y in seg), y_max=y_end)
+            b[key]=seg+ext
+
+        # 7. draw boundaries
+        for key,color in c_colors:
+            pts=b[key]
+            if len(pts)>1:
+                cv2.polylines(bev,[np.array(pts,np.int32)],False,color,2)
+
+        # 8. compute lane infos
+        infos=[]
+        for idx,(lkey,rkey) in enumerate([('b1l','b1r'),('b2l','b2r')], start=1):
+            # compute c_full
+            left, right=b[lkey],b[rkey]
+            raw_c=[]
+            if left and right:
+                lm={y:x for x,y in left}; rm={y:x for x,y in right}
+                common=sorted(set(lm)&set(rm))
+                raw_c=[((lm[y]+rm[y])//2,y) for y in common]
+            elif left:
+                raw_c=[(x+self.LANE_WIDTH_PIXELS//2,y) for x,y in left]
+            elif right:
+                raw_c=[(x-self.LANE_WIDTH_PIXELS//2,y) for x,y in right]
+            seg=self.pick_longest_segment(raw_c)
+            ext=[]
+            if len(seg)>=self.MIN_POINTS_FOR_CURVE and max(y for x,y in seg)-min(y for x,y in seg)>=self.MIN_Y_SPAN_FOR_CURVE:
+                ext=self.extrapolate_poly(seg, y_min=max(y for x,y in seg), y_max=y_end)
+            c_full=seg+ext
+
+            # regression slope
+            n=len(c_full)
+            if n>=3:
+                i20=max(0,min(n-1,n-1-int(n*0.20)))
+                i40=max(0,min(n-1,n-1-int(n*0.40)))
+                segpts=c_full[i40:i20+1] if i40<i20 else c_full[i20:i40+1]
+                ys=np.array([y for x,y in segpts]); xs=np.array([x for x,y in segpts])
+                a,_=np.polyfit(ys,xs,1)
+                ang_rad=np.arctan2(-a,1.0)
+                ang_deg=int(np.degrees(ang_rad))
+            else:
+                ang_deg=0
+            # vehicle_x based minimal abs
+            if c_full:
+                bx=c_full[-1][0]; mid=w//2
+                vx=mid-bx
+            else:
+                vx=0
+            infos.append((ang_deg,idx,vx))
+            # draw center line
+            if len(c_full)>1:
+                cv2.polylines(bev,[np.array(c_full,np.int32)],False,c_cent[idx-1],3)
+
+        # select minimal abs vehicle_x
+        best=min(infos, key=lambda x:abs(x[2]))
+        # publish
+        msg=LaneInfo()
+        msg.steering_angle=best[0]; msg.lane_num=best[1]; msg.vehicle_position_x=best[2]
+        self.lane_info_pub.publish(msg)
+        # self.get_logger().info(f"[LaneInfo] Lane {best[1]} published: angle={best[0]}, x={best[2]}")
+
+        # 9. visualization publish
+        self.viz_pub.publish(self.bridge.cv2_to_imgmsg(bev,'bgr8'))
 
 
 def main(args=None):
-    rclpy.init(args=args)
-    node = LaneDetector()
+    rclpy.init()
+    node=LaneDetector()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info('LaneDetector interrupted')
+        node.get_logger().info('Interrupted')
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()

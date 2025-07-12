@@ -6,8 +6,8 @@ import os
 
 def generate_launch_description():
      # 각 카메라에 맞는 모델 경로
-    cam0_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best.pt"
-    cam1_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/best_old.pt"
+    cam0_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/final.pt"
+    cam1_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/final.pt"
 
     return LaunchDescription([
         #################### CAMERA1(LANE) ######################
@@ -20,11 +20,11 @@ def generate_launch_description():
             parameters=[
                 {'data_source': 'image'},  # camera, video, image 선택
                 {'cam_num': 2},
-                {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/image'},
+                {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/lane2'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
                 {'show_image': False},
-                {'timer_period': 0.3},  # float형으로, fps조절 
+                {'timer_period': 1.0},  # float형으로, fps조절 
             ]
         ),
 

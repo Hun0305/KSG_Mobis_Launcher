@@ -17,7 +17,7 @@ class MotionNode(Node):
 
         # 변수
         self.angle_weight = 0.9
-        self.position_weight = -0.05
+        self.position_weight = 0.05
         self.area_threshold = 11000
 
         self.target_lane = 2
@@ -51,7 +51,7 @@ class MotionNode(Node):
             steering_value = -10 if self.target_lane == 1 else 10
             self.get_logger().info(f"차선 변경 중 → 현재 {current_lane}, 목표 {self.target_lane} → steering {steering_value}")
         else:
-            mapped_angle = (steering_angle / 60.0) * 10.0 * self.angle_weight
+            mapped_angle = (steering_angle / 40.0) * 10.0 * self.angle_weight
             position_adjustment = -vehicle_position_x * self.position_weight
             steering_value = mapped_angle + position_adjustment
             steering_value = max(-10, min(steering_value, 10))
