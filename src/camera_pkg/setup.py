@@ -32,6 +32,8 @@ setup(
              'traffic_light = camera_pkg.traffic_light:main',
              'lane = camera_pkg.lane_detect:main',
              'stop_line = camera_pkg.stop_line:main',
+             'obstacle = camera_pkg.obstacle:main',
+             
         ],
     },
 )

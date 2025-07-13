@@ -44,6 +44,9 @@ class LaneDetector(Node):
         self.LANE_WIDTH_PIXELS = 350
         self.EDGE_MARGIN = 1
 
+        # 이전 차선 저장
+        self.last_lane = None
+
         self.get_logger().info(f"LaneDetector initialized: {cam_topic}, {det_topic}")
 
     def extrapolate_poly(self, pts, y_min, y_max, degree=2):
@@ -113,7 +116,7 @@ class LaneDetector(Node):
         y0 = h//2
 
         bev = dbg.copy()
-        c_colors = [('b1l',c_b1l:=(0,0,255)),('b1r',c_b1r:=(0,165,255)),('b2l',c_b2l:=(255,0,255)),('b2r',c_b2r:=(255,255,0))]
+        c_colors = [('b1l', (0,0,255)),('b1r', (0,165,255)),('b2l', (255,0,255)),('b2r', (255,255,0))]
         c_cent = [(0,255,0),(0,255,255)]
         bound_c = (42,42,165)
 
@@ -152,8 +155,7 @@ class LaneDetector(Node):
         # 8. compute lane infos
         infos=[]
         for idx,(lkey,rkey) in enumerate([('b1l','b1r'),('b2l','b2r')], start=1):
-            # compute c_full
-            left, right=b[lkey],b[rkey]
+            left, right = b[lkey], b[rkey]
             raw_c=[]
             if left and right:
                 lm={y:x for x,y in left}; rm={y:x for x,y in right}
@@ -163,42 +165,63 @@ class LaneDetector(Node):
                 raw_c=[(x+self.LANE_WIDTH_PIXELS//2,y) for x,y in left]
             elif right:
                 raw_c=[(x-self.LANE_WIDTH_PIXELS//2,y) for x,y in right]
-            seg=self.pick_longest_segment(raw_c)
+            seg = self.pick_longest_segment(raw_c)
             ext=[]
             if len(seg)>=self.MIN_POINTS_FOR_CURVE and max(y for x,y in seg)-min(y for x,y in seg)>=self.MIN_Y_SPAN_FOR_CURVE:
                 ext=self.extrapolate_poly(seg, y_min=max(y for x,y in seg), y_max=y_end)
-            c_full=seg+ext
+            c_full = seg+ext
 
             # regression slope
             n=len(c_full)
             if n>=3:
-                i20=max(0,min(n-1,n-1-int(n*0.20)))
-                i40=max(0,min(n-1,n-1-int(n*0.40)))
-                segpts=c_full[i40:i20+1] if i40<i20 else c_full[i20:i40+1]
-                ys=np.array([y for x,y in segpts]); xs=np.array([x for x,y in segpts])
-                a,_=np.polyfit(ys,xs,1)
-                ang_rad=np.arctan2(-a,1.0)
-                ang_deg=int(np.degrees(ang_rad))
+                if idx == 1:  # lane1 
+                    i20 = max(0, min(n-1, n-1 - int(n * 0.0)))
+                    i40 = max(0, min(n-1, n-1 - int(n * 0.1)))
+                else:  # lane2 
+                    i20 = max(0, min(n-1, n-1 - int(n * 0.20)))
+                    i40 = max(0, min(n-1, n-1 - int(n * 0.40)))
+
+                segpts = c_full[i40:i20+1] if i40 < i20 else c_full[i20:i40+1]
+                ys = np.array([y for x, y in segpts])
+                xs = np.array([x for x, y in segpts])
+                a, _ = np.polyfit(ys, xs, 1)
+                ang_rad = np.arctan2(-a, 1.0)
+                ang_deg = int(np.degrees(ang_rad))
             else:
-                ang_deg=0
+                ang_deg = 0
             # vehicle_x based minimal abs
             if c_full:
                 bx=c_full[-1][0]; mid=w//2
                 vx=mid-bx
             else:
-                vx=9999
+                vx=9999  # 차선 미검출 시
             infos.append((ang_deg,idx,vx))
             # draw center line
             if len(c_full)>1:
                 cv2.polylines(bev,[np.array(c_full,np.int32)],False,c_cent[idx-1],3)
 
+        # Both lanes not detected
+        if all(vx==9999 for _,_,vx in infos):
+            # Use last known lane
+            lane_num = self.last_lane if self.last_lane is not None else 1
+            angle = 0
+            vx = 0
+            msg=LaneInfo()
+            msg.steering_angle = angle
+            msg.lane_num = lane_num
+            msg.vehicle_position_x = vx
+            self.lane_info_pub.publish(msg)
+            self.get_logger().info(f"⚠️ No lanes detected, using last_lane={lane_num}")
+            return
+
         # select minimal abs vehicle_x
         best=min(infos, key=lambda x:abs(x[2]))
+        angle, lane_num, vx = best
         # publish
         msg=LaneInfo()
-        msg.steering_angle=best[0]; msg.lane_num=best[1]; msg.vehicle_position_x=best[2]
+        msg.steering_angle=angle; msg.lane_num=lane_num; msg.vehicle_position_x=vx
         self.lane_info_pub.publish(msg)
-        # self.get_logger().info(f"[LaneInfo] Lane {best[1]} published: angle={best[0]}, x={best[2]}")
+        self.last_lane = lane_num  # update last known lane
 
         # 9. visualization publish
         self.viz_pub.publish(self.bridge.cv2_to_imgmsg(bev,'bgr8'))
@@ -214,3 +237,4 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+

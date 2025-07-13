@@ -1,4 +1,3 @@
-
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
@@ -48,16 +47,14 @@ class TrafficLightNode(Node):
 
     def sync_callback(self, img_msg, det_msg):
         cv_img = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-        detected, area = self.detect_traffic_light_color(cv_img, det_msg)
+        detected, area, color = self.detect_traffic_light_color(cv_img, det_msg)
 
-        status_msg = f"Detected: {detected}, Area: {area}"
-        if status_msg != self.last_status:
-            msg = String()
-            msg.data = status_msg
-            self.pub.publish(msg)
-            # self.get_logger().info(f'🟢 Traffic Light Result → {status_msg}')
-            self.last_status = status_msg
-
+        status_msg = f"Detected: {detected}, Area: {area}, Color: {color}"
+        
+        msg = String()
+        msg.data = status_msg
+        self.pub.publish(msg)
+        self.last_status = status_msg
 
     def detect_traffic_light_color(self, image, detections: DetectionArray):
         for det in detections.detections:
@@ -83,15 +80,33 @@ class TrafficLightNode(Node):
                     self.get_logger().warn(f"⚠️ cvtColor failed: {e}")
                     continue
 
+                # 색상 마스크 생성
                 red_mask = (
                     cv2.inRange(hsv, self.hsv_ranges['red1'][0], self.hsv_ranges['red1'][1]) +
                     cv2.inRange(hsv, self.hsv_ranges['red2'][0], self.hsv_ranges['red2'][1])
                 )
+                yellow_mask = cv2.inRange(hsv, self.hsv_ranges['yellow'][0], self.hsv_ranges['yellow'][1])
+                green_mask = cv2.inRange(hsv, self.hsv_ranges['green'][0], self.hsv_ranges['green'][1])
+
+                red_area = np.sum(red_mask > 0)
+                yellow_area = np.sum(yellow_mask > 0)
+                green_area = np.sum(green_mask > 0)
+
+                # 가장 넓은 색상 선택
+                max_area = max(red_area, yellow_area, green_area)
+                if max_area == 0:
+                    color = 'unknown'
+                elif max_area == red_area:
+                    color = 'red'
+                elif max_area == yellow_area:
+                    color = 'yellow'
+                else:
+                    color = 'green'
+
                 area = w * h
-                return True, area  # 감지된 경우
+                return True, area, color
 
-        return False, 0  # 감지 안 된 경우
-
+        return False, 0, 'none'
 
 
 def main(args=None):

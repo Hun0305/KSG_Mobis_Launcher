@@ -25,7 +25,7 @@ class ControlNode(Node):
         
         # 시리얼 포트를 통해 아두이노로 보냄
         self.ser.write(command.encode())
-        self.get_logger().info(f"Sent to Arduino: {command.strip()}")
+        #self.get_logger().info(f"Sent to Arduino: {command.strip()}")
 
 def main(args=None):
     rclpy.init(args=args)

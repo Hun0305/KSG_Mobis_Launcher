@@ -105,13 +105,22 @@ def generate_launch_description():
             output='screen',
             parameters=[]
         ),
+
+        #################### OBSTACLE DETECT ######################
+        Node(
+            package='camera_pkg',
+            executable='obstacle',
+            name='obstacle',
+            output='screen',
+            parameters=[]
+        ),
         
         
         #################### MOTION ######################
         Node(
             package='decision_making_pkg',  
-            executable='motion',  
-            name='motion_node',
+            executable='motion_mission',  
+            name='motion_mission_node',
             output='screen'
         ),
         
