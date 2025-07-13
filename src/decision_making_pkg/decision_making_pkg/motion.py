@@ -103,6 +103,7 @@ class MotionNode(Node):
                 if self.clear_counter >= 100:
                     self.wait_for_traffic_clear = False
                     self.clear_counter = 0
+                    
                     #신호등 다시 감지 시작
                     self.get_logger().info("🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢")
 

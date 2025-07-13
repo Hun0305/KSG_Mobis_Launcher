@@ -28,7 +28,8 @@ class ObstacleNode(Node):
 
         self.image_sub = Subscriber(self, Image, '/cam1/image_raw', qos_profile=qos)
         self.detection_sub = Subscriber(self, DetectionArray, '/cam1/detections', qos_profile=qos)
-
+        
+        
         self.ts = ApproximateTimeSynchronizer(
             [self.image_sub, self.detection_sub],
             queue_size=10,
@@ -43,11 +44,10 @@ class ObstacleNode(Node):
         detected, area = self.detect_obstacle(cv_img, det_msg)
 
         status_msg = f"Detected: {detected}, Area: {area}"
-        if status_msg != self.last_status:
-            msg = String()
-            msg.data = status_msg
-            self.pub.publish(msg)
-            self.last_status = status_msg
+        msg = String()
+        msg.data = status_msg
+        self.pub.publish(msg)
+        self.last_status = status_msg
 
     def detect_obstacle(self, image, detections: DetectionArray):
         for det in detections.detections:
