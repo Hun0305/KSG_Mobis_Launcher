@@ -34,11 +34,20 @@ class MotionNode(Node):
         self.current_lane = None
         self.target_lane = 2
 
-        # lane 2 설정 (lane 1 주행은 안 하므로 제거)
+        # 주행 설정
         self.angle_weight = 0.7
         self.position_weight = 0.05
         self.normal_speed = 255
         self.lane_change_speed = 100
+
+        # 1차선 장애물 속도 제어 설정
+        self.obstacle_min_area = 9000
+        self.obstacle_max_area = 10000
+        self.forward_max_speed = 255
+        self.backward_max_speed = 150
+
+
+        self.last_obstacle_msg = None
 
     def obstacle_callback(self, msg: String):
         match = re.match(r'Detected:\s*(\w+),\s*Area:\s*([\d.]+)', msg.data)
@@ -47,6 +56,7 @@ class MotionNode(Node):
 
         detected = match.group(1).lower() == 'true'
         area = float(match.group(2))
+        self.last_obstacle_msg = msg.data  # 최신 메시지 저장
 
         self.get_logger().info(f"[Obstacle] detected={detected}, area={area}, current_lane={self.current_lane}")
 
@@ -128,7 +138,7 @@ class MotionNode(Node):
             cmd.left_speed = normal_spd
             cmd.right_speed = normal_spd
 
-            if abs(steering) <= 3:
+            if abs(steering) <= 5:
                 self.steering_stable_count += 1
                 self.get_logger().info(f"🟢 안정화 중: {self.steering_stable_count}/5")
                 if self.steering_stable_count >= 5:
@@ -145,11 +155,53 @@ class MotionNode(Node):
         # 🚗 일반 주행
         else:
             if self.current_lane == 1:
-                # 1차선에서는 조향·속도 제어 X (정지)
                 cmd.steering = 0
-                cmd.left_speed = 0
-                cmd.right_speed = 0
-                self.get_logger().info("🛑 1차선: 주행 로직 중지됨 (정지)")
+
+                if self.last_obstacle_msg:
+                    match = re.match(r'Detected:\s*(\w+),\s*Area:\s*([\d.]+)', self.last_obstacle_msg)
+                    if match and match.group(1).lower() == 'true':
+                        area = float(match.group(2))
+                        if area < self.obstacle_min_area:
+                            
+                            #직진 조향
+                            mapped = (steering_angle / 50.0) * 10.0 * angle_w
+                            adjust = -vehicle_position_x * pos_w
+                            steering = max(-10, min(mapped + adjust, 10))
+                            
+                            # 작은 장애물 → 가까이 없음 → 빠르게 전진
+                            scale = 1.0 - (area / self.obstacle_min_area)
+                            speed = int(scale * self.forward_max_speed)
+                            cmd.left_speed = speed
+                            cmd.right_speed = speed
+                            self.get_logger().info(f"🟢 작은 장애물 (area={area}) → 전진 속도 {speed}")
+
+                        elif area > self.obstacle_max_area:
+
+                            #후진 조향
+                            mapped = (steering_angle / 50.0) * 10.0 * angle_w
+                            adjust = -vehicle_position_x * pos_w
+                            steering = -max(-10, min(mapped + adjust, 10)) 
+
+
+                            # 큰 장애물 → 가까이 있음 → 빠르게 후진
+                            scale = min((area - self.obstacle_max_area) / self.obstacle_max_area, 1.0)
+                            speed = int(scale * self.backward_max_speed)
+                            cmd.left_speed = -speed
+                            cmd.right_speed = -speed
+                            self.get_logger().info(f"🔴 큰 장애물 (area={area}) → 후진 속도 {-speed}")
+
+                        else:
+                            cmd.left_speed = 0
+                            cmd.right_speed = 0
+                            self.get_logger().info(f"🟡 중간 장애물 (area={area}) → 정지")
+                    else:
+                        cmd.left_speed = 0
+                        cmd.right_speed = 0
+                else:
+                    cmd.left_speed = 0
+                    cmd.right_speed = 0
+                    self.get_logger().info("⚠️ 장애물 정보 없음 → 정지")
+
             else:
                 mapped = (steering_angle / 50.0) * 10.0 * angle_w
                 adjust = -vehicle_position_x * pos_w
