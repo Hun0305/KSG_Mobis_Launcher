@@ -16,9 +16,9 @@ class MotionNode(Node):
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
         # 신호등 감지 설정
-        self.lane1_area_threshold = 10000
-        self.lane2_area_threshold =  8000  # lane2에서는 좀 낮게
-        self.required_count = 5
+        self.lane1_area_threshold = 20000
+        self.lane2_area_threshold =  17000  # lane2에서는 좀 낮게
+        self.required_count = 3
 
         # 상태 변수
         self.is_changing_lane = False
@@ -31,9 +31,9 @@ class MotionNode(Node):
         self.clear_counter = 0
 
         # lane 1 설정
-        self.lane1_angle_weight = 0.8
+        self.lane1_angle_weight = 0.7
         self.lane1_position_weight = 0.05
-        self.lane1_normal_speed = 255
+        self.lane1_normal_speed =255
         self.lane1_lane_change_speed = 200
 
         # lane 2 설정
@@ -70,7 +70,7 @@ class MotionNode(Node):
         # 현재 lane에 맞는 threshold 선택
         if self.current_lane == 1:
             threshold = self.lane1_area_threshold
-        elif self.current_lane == 2:
+        else :
             threshold = self.lane2_area_threshold
 
         # 신호등이 감지 됐으며 크기가 클 때
@@ -127,7 +127,7 @@ class MotionNode(Node):
 
         # 차선 변경 중일 때
         if self.is_changing_lane:
-            steering_value = -8 if self.target_lane == 1 else 7
+            steering_value = -8 if self.target_lane == 1 else 10
             cmd.left_speed = lane_change_speed
             cmd.right_speed = lane_change_speed
             self.get_logger().info(f"🔁 Changing lane...")
@@ -141,7 +141,8 @@ class MotionNode(Node):
 
             # lane1에서 좌회전 시 왼쪽 바퀴 속도 줄이기
             if self.current_lane == 1 and steering_value < -8:
-                cmd.left_speed = int(250 + steering_value * 10)
+                cmd.left_speed = 200
+
 
         cmd.steering = int(steering_value)
         self.motion_pub.publish(cmd)

@@ -176,10 +176,10 @@ class LaneDetector(Node):
             if n>=3:
                 if idx == 1:  # lane1 
                     i20 = max(0, min(n-1, n-1 - int(n * 0.0)))
-                    i40 = max(0, min(n-1, n-1 - int(n * 0.1)))
+                    i40 = max(0, min(n-1, n-1 - int(n * 0.4)))
                 else:  # lane2 
-                    i20 = max(0, min(n-1, n-1 - int(n * 0.20)))
-                    i40 = max(0, min(n-1, n-1 - int(n * 0.40)))
+                    i20 = max(0, min(n-1, n-1 - int(n * 0.2)))
+                    i40 = max(0, min(n-1, n-1 - int(n * 0.4)))
 
                 segpts = c_full[i40:i20+1] if i40 < i20 else c_full[i20:i40+1]
                 ys = np.array([y for x, y in segpts])

@@ -26,85 +26,111 @@ class TrafficLightNode(Node):
             depth=1
         )
 
-        self.image_sub = Subscriber(self, Image, '/cam1/image_raw', qos_profile=qos)
+        # 원본 영상 & DetectionArray 동기화 (기존 퍼블리셔 유지)
+        self.image_sub     = Subscriber(self, Image,          '/cam1/image_raw',   qos_profile=qos)
         self.detection_sub = Subscriber(self, DetectionArray, '/cam1/detections', qos_profile=qos)
-
-        self.ts = ApproximateTimeSynchronizer(
+        self.ts            = ApproximateTimeSynchronizer(
             [self.image_sub, self.detection_sub],
             queue_size=10,
             slop=0.5
         )
         self.ts.registerCallback(self.sync_callback)
 
-        self.pub = self.create_publisher(String, 'traffic_light_result', qos)
+        # 결과 문자열 퍼블리셔
+        self.pub      = self.create_publisher(String, 'traffic_light_result', qos)
+        # → 마스킹 영상 퍼블리셔 추가
+        self.mask_pub = self.create_publisher(Image,  '/cam1/traffic_light_mask', qos)
 
+        # 색상 검출용 HSV 범위
         self.hsv_ranges = {
-            'red1': (np.array([0, 100, 95]), np.array([10, 255, 255])),
-            'red2': (np.array([160, 100, 95]), np.array([179, 255, 255])),
-            'yellow': (np.array([20, 100, 95]), np.array([30, 255, 255])),
-            'green': (np.array([40, 100, 95]), np.array([90, 255, 255]))
+            'red1':   (np.array([0,   100, 95]), np.array([10,  255,255])),
+            'red2':   (np.array([160, 100, 95]), np.array([179, 255,255])),
+            'yellow': (np.array([20,  100, 95]), np.array([30,  255,255])),
+            'green':  (np.array([40,  100, 95]), np.array([90,  255,255]))
         }
 
     def sync_callback(self, img_msg, det_msg):
+        # 1) 원본 프레임 변환
         cv_img = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-        detected, area, color = self.detect_traffic_light_color(cv_img, det_msg)
 
+        # 2) 색 검출 & 문자열 퍼블리시
+        detected, area, color = self.detect_traffic_light_color(cv_img, det_msg)
         status_msg = f"Detected: {detected}, Area: {area}, Color: {color}"
-        
-        msg = String()
-        msg.data = status_msg
-        self.pub.publish(msg)
+        out = String()
+        out.data = status_msg
+        self.pub.publish(out)
         self.last_status = status_msg
+
+        # 3) 마스킹 영상 생성
+        overlay = cv_img.copy()
+        for det in det_msg.detections:
+            if det.class_name != 'traffic_light':
+                continue
+
+            # bbox 픽셀 좌표
+            cx = int(det.bbox.center.position.x)
+            cy = int(det.bbox.center.position.y)
+            w  = int(det.bbox.size.x)
+            h  = int(det.bbox.size.y)
+            x1 = max(cx - w//2, 0)
+            y1 = max(cy - h//2, 0)
+            x2 = min(cx + w//2, cv_img.shape[1])
+            y2 = min(cy + h//2, cv_img.shape[0])
+
+            # 컬러 매핑
+            if   color == 'red':    bgr = (0, 0, 255)
+            elif color == 'yellow': bgr = (0, 255, 255)
+            elif color == 'green':  bgr = (0, 255, 0)
+            else:                   bgr = (255, 255, 255)  # unknown
+
+            # 반투명 박스
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), bgr, -1)
+
+        # 4) 합성
+        alpha = 0.5
+        cv2.addWeighted(overlay, alpha, cv_img, 1 - alpha, 0, cv_img)
+
+        # 5) 퍼블리시
+        mask_msg = self.bridge.cv2_to_imgmsg(cv_img, encoding='bgr8')
+        self.mask_pub.publish(mask_msg)
 
     def detect_traffic_light_color(self, image, detections: DetectionArray):
         for det in detections.detections:
             if det.class_name == 'traffic_light':
+                # ROI 설정
                 cx = int(det.bbox.center.position.x)
                 cy = int(det.bbox.center.position.y)
-                w = int(det.bbox.size.x)
-                h = int(det.bbox.size.y)
+                w  = int(det.bbox.size.x)
+                h  = int(det.bbox.size.y)
 
-                x1 = max(cx - w // 2, 0)
-                y1 = max(cy - h // 2, 0)
-                x2 = min(cx + w // 2, image.shape[1])
-                y2 = min(cy + h // 2, image.shape[0])
+                x1 = max(cx - w//2, 0)
+                y1 = max(cy - h//2, 0)
+                x2 = min(cx + w//2, image.shape[1])
+                y2 = min(cy + h//2, image.shape[0])
 
                 roi = image[y1:y2, x1:x2]
-                if roi is None or roi.size == 0:
-                    self.get_logger().warn("⚠️ Empty ROI, skipping detection")
+                if roi.size == 0:
                     continue
 
-                try:
-                    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-                except Exception as e:
-                    self.get_logger().warn(f"⚠️ cvtColor failed: {e}")
-                    continue
+                hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-                # 색상 마스크 생성
-                red_mask = (
-                    cv2.inRange(hsv, self.hsv_ranges['red1'][0], self.hsv_ranges['red1'][1]) +
-                    cv2.inRange(hsv, self.hsv_ranges['red2'][0], self.hsv_ranges['red2'][1])
-                )
-                yellow_mask = cv2.inRange(hsv, self.hsv_ranges['yellow'][0], self.hsv_ranges['yellow'][1])
-                green_mask = cv2.inRange(hsv, self.hsv_ranges['green'][0], self.hsv_ranges['green'][1])
+                # 마스크 생성
+                red_mask    = cv2.inRange(hsv, *self.hsv_ranges['red1']) + cv2.inRange(hsv, *self.hsv_ranges['red2'])
+                yellow_mask = cv2.inRange(hsv, *self.hsv_ranges['yellow'])
+                green_mask  = cv2.inRange(hsv, *self.hsv_ranges['green'])
 
-                red_area = np.sum(red_mask > 0)
-                yellow_area = np.sum(yellow_mask > 0)
-                green_area = np.sum(green_mask > 0)
+                # 면적 계산
+                areas = {
+                    'red':    int(np.sum(red_mask    > 0)),
+                    'yellow': int(np.sum(yellow_mask > 0)),
+                    'green':  int(np.sum(green_mask  > 0))
+                }
+                # 최대 면적 색상 선택
+                max_color = max(areas, key=areas.get)
+                if areas[max_color] == 0:
+                    max_color = 'unknown'
 
-                # 가장 넓은 색상 선택
-                max_area = max(red_area, yellow_area, green_area)
-                if max_area == 0:
-                    color = 'unknown'
-                elif max_area == red_area:
-                    color = 'red'
-                elif max_area == yellow_area:
-                    color = 'yellow'
-                else:
-                    color = 'green'
-
-                area = w * h
-                return True, area, color
+                return True, w*h, max_color
 
         return False, 0, 'none'
 
