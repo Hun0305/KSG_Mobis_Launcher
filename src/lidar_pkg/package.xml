@@ -26,6 +26,8 @@
   <exec_depend>matplotlib</exec_depend>
   <exec_depend>opencv-python</exec_depend>
   <exec_depend>rplidar_ros</exec_depend> <exec_depend>rsplan</exec_depend> <exec_depend>python-statemachine</exec_depend> <test_depend>ament_copyright</test_depend>
+  <exec_depend>python3-transforms3d</exec_depend>
+
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
