@@ -77,7 +77,7 @@ class LidarSensorDataPublisher(Node):
 
         try:
             scan = next(self.lidar_sensor_data_generator)
-            print('Got %d measurements' % len(scan))
+            # print('Got %d measurements' % len(scan))
             scan = np.array(scan)
             # Create LaserScan message
             msg = LaserScan()
@@ -106,7 +106,7 @@ class LidarSensorDataPublisher(Node):
             msg.intensities = intensities
 
             self.publisher_.publish(msg)
-            self.get_logger().info('Publishing: "%s"' % PUB_TOPIC_NAME)
+            # self.get_logger().info('Publishing: "%s"' % PUB_TOPIC_NAME)
 
         except StopIteration:
             self.get_logger().error('Failed to get lidar scan')

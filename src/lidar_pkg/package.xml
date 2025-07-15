@@ -3,11 +3,29 @@
 <package format="3">
   <name>lidar_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="whaihong@g.skku.edu">hhk-laptop</maintainer>
+  <description>Lidar-based autonomous parking system for competition</description>
+  <maintainer email="your_email@example.com">Your Name</maintainer>
   <license>TODO: License declaration</license>
 
-  <test_depend>ament_copyright</test_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend> <depend>geometry_msgs</depend> <depend>nav_msgs</depend> <depend>std_msgs</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>visualization_msgs</depend>
+  <!-- <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend> -->
+  <depend>tf2_ros</depend>
+  
+  
+  <exec_depend>python3-tf-transformations</exec_depend>
+  <exec_depend>pyserial</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>scipy</exec_depend>
+  <exec_depend>matplotlib</exec_depend>
+  <exec_depend>opencv-python</exec_depend>
+  <exec_depend>rplidar_ros</exec_depend> <exec_depend>rsplan</exec_depend> <exec_depend>python-statemachine</exec_depend> <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>

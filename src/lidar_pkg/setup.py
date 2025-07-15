@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'lidar_pkg'
 
@@ -10,20 +12,25 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        # launch 폴더 안의 모든 .py와 .yaml 파일을 복사하도록 수정
+        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.[py,yaml]*'))),
     ],
+
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='hhk-laptop',
-    maintainer_email='whaihong@g.skku.edu',
-    description='TODO: Package description',
+    maintainer='Your Name',
+    maintainer_email='your_email@example.com',
+    description='Lidar-based autonomous parking system for competition',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            # 각 Python 노드 스크립트를 실행 가능한 엔트리 포인트로 등록
             'lidar_publisher = lidar_pkg.lidar_publisher:main',
-			'lidar_processor = lidar_pkg.lidar_processor:main',
-			'lidar_obstacle_detector = lidar_pkg.lidar_obstacle_detector:main',
-			
+            'ultrasonic_publisher = lidar_pkg.ultrasonic_publisher:main',
+            'parking_perception = lidar_pkg.parking_perception:main',
+            'path_planner = lidar_pkg.path_planner:main',
+            'vehicle_controller = lidar_pkg.vehicle_controller:main',
         ],
     },
 )
