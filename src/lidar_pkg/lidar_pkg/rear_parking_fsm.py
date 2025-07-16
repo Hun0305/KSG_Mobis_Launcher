@@ -40,6 +40,12 @@ class RearParkingFSM(Node):
             return not (0.05 < ranges[idx] < threshold)
 
         if self.state == 'WAIT_FOR_CAR1':
+            motion = MotionCommand()    
+            motion.steering = 0    
+            motion.left_speed = 150
+            motion.right_speed = 150
+            self.cmd_pub.publish(motion)
+            
             if detected(270):
                 self.car270_seen_count += 1
                 self.get_logger().info(f'270° 감지 횟수: {self.car270_seen_count}')
