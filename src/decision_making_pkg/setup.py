@@ -22,7 +22,6 @@ setup(
         'console_scripts': [
             'motion = decision_making_pkg.motion:main',
             'motion_mission = decision_making_pkg.motion_mission:main'
-
         ],
     },
 )
