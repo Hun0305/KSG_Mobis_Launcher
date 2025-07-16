@@ -8,7 +8,7 @@ import numpy as np
 
 class RearParkingFSM(Node):
     def __init__(self):
-        super().__init__('rear_parking_fsm_with_yaw')
+        super().__init__('rear_parking_fsm_with')
 
         self.lidar_sub = self.create_subscription(LaserScan, 'lidar_processed', self.lidar_callback, 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
