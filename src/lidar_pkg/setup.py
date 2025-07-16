@@ -30,6 +30,7 @@ setup(
             'ultrasonic_publisher = lidar_pkg.ultrasonic_publisher:main',
             'parking_perception = lidar_pkg.parking_perception:main',
             'path_planner = lidar_pkg.path_planner:main',
+            'rear_parking_fsm = lidar_pkg.rear_parking_fsm:main',
             'vehicle_controller = lidar_pkg.vehicle_controller:main',
         ],
     },
