@@ -5,11 +5,13 @@ from interfaces_pkg.msg import MotionCommand
 from enum import Enum
 
 class ParkingState(Enum):
-    SEARCH = 1
-    BACK_INTO_SPOT = 2
-    ADJUST_FORWARD = 3
-    GO_OUT_TURN = 4
-    GO_OUT_STRAIGHT = 5
+    SEARCH = 1                      # 차량 탐색
+    REVERSE_RIGHT = 2              # 바퀴 오른쪽 최대 조향 후 후진
+    REVERSE_STRAIGHT = 3           # 바퀴 정방향 후 직진 후진
+    REVERSE_PAUSE = 4              # 후진 완료 후 3초 정지
+    ADJUST_FORWARD = 5             # 전진 조정 (필요 시)
+    GO_OUT_TURN = 6                # 탈출 회전
+    GO_OUT_STRAIGHT = 7            # 탈출 직진
 
 class ParkingNode(Node):
     def __init__(self):
