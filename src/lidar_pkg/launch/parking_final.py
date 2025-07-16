@@ -9,7 +9,11 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     lidar_pkg_dir = get_package_share_directory('lidar_pkg')
-    slam_config_path = os.path.join(lidar_pkg_dir, 'launch', 'slam_config.yaml')
+    slam_config_path = os.path.join(
+        get_package_share_directory('lidar_pkg'),
+        'config', # 'launch' 대신 'config'
+        'slam_config.yaml'
+    )
 
     # 1. LiDAR 퍼블리셔 노드
     lidar_publisher = Node(
@@ -18,19 +22,6 @@ def generate_launch_description():
         name='lidar_publisher',
         output='screen'
         # 파라미터는 lidar_publisher.py 내부 기본값 사용
-    )
-
-    # 2. 초음파 센서 퍼블리셔 노드
-    ultrasonic_publisher = Node(
-        package='control_pkg',
-        executable='ultrasonic_publisher', # .py 제거 (가정)
-        name='ultrasonic_publisher',
-        output='screen',
-        parameters=[
-            {'serial_port': '/dev/ttyACM0'},
-            {'baud_rate': 9600},
-            {'num_sensors': 10}
-        ]
     )
 
     # 3. 주차 공간 인지 노드
@@ -63,19 +54,16 @@ def generate_launch_description():
         ]
     )
 
-    # 6. cmd_vel_translator 노드 (번역기)
-    cmd_vel_translator = Node(
-        package='control_pkg',
-        executable='cmd_vel_translator', # .py 제거 (가정)
-        name='cmd_vel_translator_node'
-    )
-
     # 7. control 노드 (아두이노 통신)
     control = Node(
         package='control_pkg',
-        executable='control', # .py 제거 (가정)
-        name='control_node'
+        # 실행 파일 이름을 새로 추가한 'parking_control'로 변경
+        executable='parking_control', 
+        # 노드 이름도 명확하게 'parking_control_node'로 변경 (권장)
+        name='parking_control', 
+        output='screen'
     )
+
 
     # 8. SLAM 노드
     slam_toolbox = Node(
@@ -88,11 +76,9 @@ def generate_launch_description():
 
     # 모든 노드를 런치 디스크립션에 추가
     ld.add_action(lidar_publisher)
-    ld.add_action(ultrasonic_publisher)
     ld.add_action(parking_perception)
     ld.add_action(path_planner)
     ld.add_action(vehicle_controller)
-    ld.add_action(cmd_vel_translator)
     ld.add_action(control)
     ld.add_action(slam_toolbox)
 

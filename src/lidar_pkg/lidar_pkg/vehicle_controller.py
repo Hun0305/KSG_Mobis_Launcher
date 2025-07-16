@@ -1,3 +1,5 @@
+# src/lidar_pkg/lidar_pkg/vehicle_controller.py
+
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Path, Odometry
@@ -6,10 +8,11 @@ import numpy as np
 import tf_transformations
 
 # --- 튜닝 파라미터 ---
-LOOKAHEAD_DISTANCE = 1.0  # 전방 주시 거리 (m) - 경로상의 얼마나 앞 포인트를 볼 것인가
-VEHICLE_LENGTH = 0.3      # 차량 축거 (m) - 차량의 뒷바퀴와 앞바퀴 사이의 거리
-MAX_STEER = np.radians(25)  # 최대 조향각 (radians)
-TARGET_VELOCITY = 0.2     # 목표 주행 속도 (m/s)
+LOOKAHEAD_DISTANCE = 1.0
+VEHICLE_LENGTH = 0.3
+MAX_STEER = np.radians(25)
+TARGET_VELOCITY = 0.2
+INITIAL_VELOCITY = 0.1  # <<< 추가: 초기 저속 주행 속도
 
 class VehicleController(Node):
     def __init__(self):
@@ -20,56 +23,77 @@ class VehicleController(Node):
             Path,
             '/global_path',
             self.path_callback,
-            1) # 경로는 한 번만 받으면 되므로 QoS=1
+            1)
         self.odom_subscription = self.create_subscription(
             Odometry,
-            '/odom',  # Odometry 토픽 이름 (실제 사용하는 토픽으로 변경 필요)
+            '/odom',
             self.odom_callback,
             10)
 
         # 차량 제어 명령 (Twist)을 발행
-        # control_pkg의 control.py가 이 토픽을 구독하여 아두이노로 전달해야 함
         self.cmd_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
         self.current_path = None
         self.current_pose = None
         self.path_index = 0
 
+        # <<< 추가: 초기 주행 상태 플래그 및 타이머 >>>
+        self.is_initial_drive = True
+        self.initial_drive_timer = self.create_timer(0.1, self.initial_drive_callback)
+        # <<< --- >>>
+
         self.get_logger().info('Vehicle Controller Node has been started.')
+        self.get_logger().info('Starting with initial slow drive.')
+
+
+    # <<< 추가: 초기 저속 직진 콜백 함수 >>>
+    def initial_drive_callback(self):
+        """초기 주행 상태일 때 저속으로 직진 명령을 보냅니다."""
+        if self.is_initial_drive:
+            # 저속으로 직진하는 Twist 메시지 생성
+            twist = Twist()
+            twist.linear.x = INITIAL_VELOCITY
+            twist.angular.z = 0.0
+            self.cmd_publisher.publish(twist)
+    # <<< --- >>>
 
     def path_callback(self, msg):
-        """경로를 수신하여 저장"""
-        if not self.current_path: # 경로를 한 번만 저장
-            self.get_logger().info('Path received.')
+        """경로를 수신하면 초기 주행을 멈추고 경로 추종을 시작합니다."""
+        if not self.current_path and msg.poses:
+            self.get_logger().info('Path received. Switching to path following mode.')
             self.current_path = msg.poses
             self.path_index = 0
 
+            # <<< 추가: 초기 주행 상태 비활성화 및 타이머 취소 >>>
+            self.is_initial_drive = False
+            if self.initial_drive_timer:
+                self.initial_drive_timer.cancel()
+            # <<< --- >>>
+
     def odom_callback(self, msg):
         """Odometry 정보를 받아 제어 명령을 계산하고 발행"""
-        # 경로가 없거나, 차량의 현재 위치를 모르면 아무것도 하지 않음
-        if self.current_path is None:
+        # <<< 수정: 초기 주행 상태에서는 odom 콜백이 제어하지 않도록 함 >>>
+        if self.is_initial_drive or self.current_path is None:
             return
+        # <<< --- >>>
 
         self.current_pose = msg.pose.pose
         current_position = self.current_pose.position
-        
-        # Pure Pursuit 알고리즘 실행
+
         lookahead_point, target_index = self.find_lookahead_point(current_position)
-        
+
         if lookahead_point is None:
-            # 경로의 끝에 도달하면 정지
             self.publish_control_command(0.0, 0.0)
             self.get_logger().info('Reached the end of the path.')
-            self.current_path = None # 경로 초기화
+            self.current_path = None
             return
 
-        # 조향각과 속도 계산
         steering_angle = self.calculate_steering_angle(lookahead_point)
-        current_velocity = TARGET_VELOCITY # 현재는 등속 주행
+        current_velocity = TARGET_VELOCITY
 
-        # 제어 명령 발행
         self.publish_control_command(current_velocity, steering_angle)
 
+    # (이하 나머지 코드는 동일)
     def find_lookahead_point(self, current_position):
         """현재 위치에서 가장 가까운 경로점을 찾고, 그 점에서부터 전방 주시 거리만큼 떨어진 목표점을 찾음"""
         min_dist = float('inf')
@@ -83,7 +107,7 @@ class VehicleController(Node):
             if dist < min_dist:
                 min_dist = dist
                 closest_index = i
-        
+
         self.path_index = closest_index # 다음 검색 시 여기서부터 시작
 
         # 가장 가까운 점에서부터 전방 주시 거리(LOOKAHEAD_DISTANCE) 이상 떨어진 첫 번째 점을 찾음
@@ -93,7 +117,7 @@ class VehicleController(Node):
             dist = np.sqrt(dx**2 + dy**2)
             if dist >= LOOKAHEAD_DISTANCE:
                 return self.current_path[i].pose.position, i
-        
+
         # 경로 끝까지 그런 점이 없으면 경로의 마지막 점을 반환
         return self.current_path[-1].pose.position, len(self.current_path) - 1
 
@@ -102,10 +126,10 @@ class VehicleController(Node):
         # 1. 차량 좌표계 기준으로 목표점의 위치 변환
         q = self.current_pose.orientation
         _, _, yaw = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        
+
         dx = target_point.x - self.current_pose.position.x
         dy = target_point.y - self.current_pose.position.y
-        
+
         rotated_x = dx * np.cos(-yaw) - dy * np.sin(-yaw)
         rotated_y = dx * np.sin(-yaw) + dy * np.cos(-yaw)
 

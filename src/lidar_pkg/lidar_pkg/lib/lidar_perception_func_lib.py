@@ -32,37 +32,37 @@ import struct
 from collections import namedtuple
 
 
-message = """
- ____    ___   ____    ____  
-|  _ \  / _ \ / ___|  |___ \ 
-| |_) || | | |\___ \    __) |
-|  _ < | |_| | ___) |  / __/ 
-|_| \_\ \___/ |____/  |_____|
+# message = """
+#  ____    ___   ____    ____  
+# |  _ \  / _ \ / ___|  |___ \ 
+# | |_) || | | |\___ \    __) |
+# |  _ < | |_| | ___) |  / __/ 
+# |_| \_\ \___/ |____/  |_____|
                              
-    _            _                 
-   / \    _   _ | |_   ___         
-  / _ \  | | | || __| / _ \  _____ 
- / ___ \ | |_| || |_ | (_) ||_____|
-/_/   \_\ \__,_| \__| \___/        
+#     _            _                 
+#    / \    _   _ | |_   ___         
+#   / _ \  | | | || __| / _ \  _____ 
+#  / ___ \ | |_| || |_ | (_) ||_____|
+# /_/   \_\ \__,_| \__| \___/        
                                    
-__     __       _      _        _       
-\ \   / /  ___ | |__  (_)  ___ | |  ___ 
- \ \ / /  / _ \| '_ \ | | / __|| | / _ \
-  \ V /  |  __/| | | || || (__ | ||  __/
-   \_/    \___||_| |_||_| \___||_| \___|  
+# __     __       _      _        _       
+# \ \   / /  ___ | |__  (_)  ___ | |  ___ 
+#  \ \ / /  / _ \| '_ \ | | / __|| | / _ \
+#   \ V /  |  __/| | | || || (__ | ||  __/
+#    \_/    \___||_| |_||_| \___||_| \___|  
 
-"""
-print(message)
+# """
+# print(message)
 
-print("ROS2 기반 자율주행 설계 및 구현")
-print("Sungkyunkwan University Automation Lab.")
+# print("ROS2 기반 자율주행 설계 및 구현")
+# print("Sungkyunkwan University Automation Lab.")
 
-print("------------------Authors------------------")
-print("Hyeong-Keun Hong <whaihong@g.skku.edu>")
-print("Jinsun Lee <with23skku@g.skku.edu>")
-print("Siwoo Lee <edenlee@g.skku.edu>")
-print("Jae-Wook Jeon <jwjeon@skku.edu>")
-print("------------------------------------------")
+# print("------------------Authors------------------")
+# print("Hyeong-Keun Hong <whaihong@g.skku.edu>")
+# print("Jinsun Lee <with23skku@g.skku.edu>")
+# print("Siwoo Lee <edenlee@g.skku.edu>")
+# print("Jae-Wook Jeon <jwjeon@skku.edu>")
+# print("------------------------------------------")
 
 
 
