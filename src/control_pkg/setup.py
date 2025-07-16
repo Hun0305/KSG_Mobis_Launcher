@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'keyboard_controller = control_pkg.keyboard_controller:main',
             'control = control_pkg.control:main',
+            'parking_control = control_pkg.parking_control:main',
         ],
     },
 )

@@ -9,7 +9,11 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     lidar_pkg_dir = get_package_share_directory('lidar_pkg')
-    slam_config_path = os.path.join(lidar_pkg_dir, 'launch', 'slam_config.yaml')
+    slam_config_path = os.path.join(
+        get_package_share_directory('lidar_pkg'),
+        'config', # 'launch' 대신 'config'
+        'slam_config.yaml'
+    )
 
     # 1. LiDAR 퍼블리셔 노드
     lidar_publisher = Node(
@@ -53,9 +57,13 @@ def generate_launch_description():
     # 7. control 노드 (아두이노 통신)
     control = Node(
         package='control_pkg',
-        executable='control', # .py 제거 (가정)
-        name='control_node'
+        # 실행 파일 이름을 새로 추가한 'parking_control'로 변경
+        executable='parking_control', 
+        # 노드 이름도 명확하게 'parking_control_node'로 변경 (권장)
+        name='parking_control', 
+        output='screen'
     )
+
 
     # 8. SLAM 노드
     slam_toolbox = Node(
