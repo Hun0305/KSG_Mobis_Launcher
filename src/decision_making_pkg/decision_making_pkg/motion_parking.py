@@ -30,14 +30,19 @@ class ParkingNode(Node):
     def lidar_callback(self, msg: LaserScan):
         if self.state == ParkingState.SEARCH:
             self.handle_search(msg)
-        elif self.state == ParkingState.BACK_INTO_SPOT:
-            self.handle_back_into_spot(msg)
+        elif self.state == ParkingState.REVERSE_RIGHT:
+            self.handle_reverse_right(msg)
+        elif self.state == ParkingState.REVERSE_STRAIGHT:
+            self.handle_reverse_straight(msg)
+        elif self.state == ParkingState.REVERSE_PAUSE:
+            self.handle_reverse_pause(msg)
         elif self.state == ParkingState.ADJUST_FORWARD:
             self.handle_adjust_forward(msg)
         elif self.state == ParkingState.GO_OUT_TURN:
             self.handle_go_out_turn(msg)
         elif self.state == ParkingState.GO_OUT_STRAIGHT:
             self.handle_go_out_straight(msg)
+
 
     def handle_search(self, msg: LaserScan):
         # 265~275도 범위 평균 거리 계산
