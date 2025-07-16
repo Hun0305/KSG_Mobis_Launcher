@@ -5,7 +5,7 @@ from interfaces_pkg.msg import MotionCommand
 from enum import Enum
 
 class ParkingState(Enum):
-    SEARCH = 1                      # 차량 탐색
+    SEARCH = 1                     # 차량 탐색
     REVERSE_RIGHT = 2              # 바퀴 오른쪽 최대 조향 후 후진
     REVERSE_STRAIGHT = 3           # 바퀴 정방향 후 직진 후진
     REVERSE_PAUSE = 4              # 후진 완료 후 3초 정지
