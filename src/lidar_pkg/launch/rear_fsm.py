@@ -3,18 +3,17 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
+        
+         
         Node(
             package='lidar_pkg',
             executable='rear_parking_fsm',
             name='rear_parking_fsm',
             output='screen'
         ),
-        Node(
-            package='control_pkg',
-            executable='parking_control',
-            name='parking_control',
-            output='screen'
-        ),
+
+        #################### Lidar ######################
+
         Node(
             package='rplidar_ros',
             executable='rplidar_composition',
@@ -28,6 +27,10 @@ def generate_launch_description():
                 'angle_compensate': True,
             }],
         ),
+
+
+        #################### Static TF ######################
+
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
