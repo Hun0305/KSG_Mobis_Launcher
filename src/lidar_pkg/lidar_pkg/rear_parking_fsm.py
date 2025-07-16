@@ -13,7 +13,6 @@ class RearParkingFSM(Node):
             self.lidar_callback,
             10
         )
-
         self.publisher = self.create_publisher(
             MotionCommand,
             'motion_command',
@@ -21,7 +20,9 @@ class RearParkingFSM(Node):
         )
 
         self.state = 'WAIT_FOR_CAR1'
-        self.backward_clear = False
+        self.car270_seen_count = 0
+        self.pause_start_time = None
+        self.forward_straight_start_time = None
         self.get_logger().info('Rear Parking FSM started.')
 
     def lidar_callback(self, msg):
@@ -37,14 +38,17 @@ class RearParkingFSM(Node):
 
         if self.state == 'WAIT_FOR_CAR1':
             if detected(270):
-                self.state = 'REVERSE_RIGHT'
-                self.get_logger().info('Car1 detected at 270° → start REVERSE_RIGHT')
+                self.car270_seen_count += 1
+                self.get_logger().info(f'270° 감지 횟수: {self.car270_seen_count}')
+                if self.car270_seen_count == 2:
+                    self.state = 'REVERSE_RIGHT'
+                    self.get_logger().info('270° 두 번째 감지 → REVERSE_RIGHT 진입')
 
         elif self.state == 'REVERSE_RIGHT':
             if not_detected(270) and not_detected(90):
-                self.backward_clear = True
-                self.state = 'FORWARD_CHECK'
-                self.get_logger().info('Both 90° and 270° are clear → move to FORWARD_CHECK')
+                self.state = 'PAUSE_CENTER'
+                self.pause_start_time = self.get_clock().now().nanoseconds
+                self.get_logger().info('차량이 양쪽에서 사라짐 → 3초 정지 시작')
             else:
                 motion = MotionCommand()
                 motion.steering = 30
@@ -52,13 +56,25 @@ class RearParkingFSM(Node):
                 motion.right_speed = -130
                 self.publisher.publish(motion)
 
-        elif self.state == 'FORWARD_CHECK':
-            if not_detected(90) and not_detected(270):
-                self.state = 'FORWARD_RIGHT'
-                self.get_logger().info('Still clear → move to FORWARD_RIGHT')
-            else:
-                self.get_logger().info('Detected again, skipping to FORWARD_OUT')
-                self.state = 'FORWARD_OUT'
+        elif self.state == 'PAUSE_CENTER':
+            now = self.get_clock().now().nanoseconds
+            if now - self.pause_start_time >= 3e9:
+                self.state = 'FORWARD_STRAIGHT'
+                self.forward_straight_start_time = now
+                self.get_logger().info('정지 완료 → FORWARD_STRAIGHT')
+
+        elif self.state == 'FORWARD_STRAIGHT':
+            now = self.get_clock().now().nanoseconds
+            motion = MotionCommand()
+            motion.steering = 0
+            motion.left_speed = 150
+            motion.right_speed = 150
+            self.publisher.publish(motion)
+
+            if now - self.forward_straight_start_time >= 1.5e9:
+                if not_detected(90) and not_detected(270):
+                    self.state = 'FORWARD_RIGHT'
+                    self.get_logger().info('Clear detected after 1.5s → FORWARD_RIGHT')
 
         elif self.state == 'FORWARD_RIGHT':
             if detected(270):
