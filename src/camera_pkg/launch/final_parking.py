@@ -9,7 +9,7 @@ def generate_launch_description():
         Node(
             package='decision_making_pkg',
             executable='motion_parking',
-            name='parking',
+            name='motion_parking',
             output='screen'
         ),
 
@@ -37,5 +37,13 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='lidar_tf_pub',
             arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'laser'],
+        ),
+
+        #################### CONTROL ######################
+        Node(
+            package='control_pkg',  
+            executable='parking_control',  
+            name='control_node',
+            output='screen'
         )
     ])
