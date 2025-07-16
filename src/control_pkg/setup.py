@@ -22,8 +22,6 @@ setup(
         'console_scripts': [
             'keyboard_controller = control_pkg.keyboard_controller:main',
             'control = control_pkg.control:main',
-            'ultrasonic_publisher = control_pkg.ultrasonic_publisher:main',
-            'cmd_vel_translator = control_pkg.cmd_vel_translator:main',
         ],
     },
 )
