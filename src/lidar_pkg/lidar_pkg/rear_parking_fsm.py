@@ -20,6 +20,8 @@ class RearParkingFSM(Node):
         self.forward_straight_start_time = None
         self.start_yaw = None
         self.current_yaw = None
+        self.start_time = None
+        self.first_detect_time = None
 
         self.get_logger().info('Rear Parking FSM with Yaw Tracking started.')
 
@@ -32,32 +34,58 @@ class RearParkingFSM(Node):
         ranges = msg.ranges
 
         def detected(angle, threshold=1.5):
+            if not ranges:
+                return False
             idx = angle % len(ranges)
             return 0.05 < ranges[idx] < threshold
 
         def not_detected(angle, threshold=1.5):
+            if not ranges:
+                return True
             idx = angle % len(ranges)
             return not (0.05 < ranges[idx] < threshold)
 
+        now = self.get_clock().now().nanoseconds
+
         if self.state == 'WAIT_FOR_CAR1':
-            motion = MotionCommand()    
-            motion.steering = 0    
+            # FSM 시작 시간 초기화
+            if self.start_time is None:
+                self.start_time = now
+
+            # 전진 명령
+            motion = MotionCommand()
+            motion.steering = 0
             motion.left_speed = 150
             motion.right_speed = 150
             self.cmd_pub.publish(motion)
-            
+
+            # [1] 시작 후 2초 이내는 감지 무시
+            if now - self.start_time < 2e9:
+                return
+
+            # [2] 감지된 경우
             if detected(270):
-                self.car270_seen_count += 1
-                self.get_logger().info(f'270° 감지 횟수: {self.car270_seen_count}')
-                if self.car270_seen_count == 2:
-                    self.state = 'REVERSE_RIGHT'
-                    self.start_yaw = self.current_yaw
-                    self.get_logger().info('270° 두 번째 감지 → REVERSE_RIGHT 진입, 시작 yaw 저장')
+                if self.first_detect_time is None:
+                    self.first_detect_time = now
+                    self.car270_seen_count = 1
+                    self.get_logger().info('270° 첫 감지 기록')
+                else:
+                    if now - self.first_detect_time <= 2e9:
+                        self.car270_seen_count += 1
+                        self.get_logger().info(f'270° 재감지 → count = {self.car270_seen_count}')
+                        if self.car270_seen_count == 2:
+                            self.state = 'REVERSE_RIGHT'
+                            self.start_yaw = self.current_yaw
+                            self.get_logger().info('270° 두 번째 감지 → REVERSE_RIGHT 진입, yaw 저장')
+                    else:
+                        self.car270_seen_count = 1
+                        self.first_detect_time = now
+                        self.get_logger().info('270° 재감지 지연 → count 초기화')
 
         elif self.state == 'REVERSE_RIGHT':
             if self.start_yaw is not None and self.current_yaw is not None:
                 yaw_diff = abs(self.normalize_angle(self.current_yaw - self.start_yaw))
-                if yaw_diff >= np.radians(85):  # 약 90도
+                if yaw_diff >= np.radians(85):
                     self.state = 'REVERSE_STRAIGHT'
                     self.get_logger().info(f'Yaw 변화 {np.degrees(yaw_diff):.1f}° → REVERSE_STRAIGHT 진입')
                     return
@@ -71,24 +99,22 @@ class RearParkingFSM(Node):
         elif self.state == 'REVERSE_STRAIGHT':
             if not_detected(270) and not_detected(90):
                 self.state = 'PAUSE_CENTER'
-                self.pause_start_time = self.get_clock().now().nanoseconds
+                self.pause_start_time = now
                 self.get_logger().info('차량이 양쪽에서 사라짐 → 3초 정지 시작')
             else:
                 motion = MotionCommand()
-                motion.steering = 0  # 직진 후진
+                motion.steering = 0
                 motion.left_speed = -130
                 motion.right_speed = -130
                 self.cmd_pub.publish(motion)
 
         elif self.state == 'PAUSE_CENTER':
-            now = self.get_clock().now().nanoseconds
             if now - self.pause_start_time >= 3e9:
                 self.state = 'FORWARD_STRAIGHT'
                 self.forward_straight_start_time = now
                 self.get_logger().info('정지 완료 → FORWARD_STRAIGHT')
 
         elif self.state == 'FORWARD_STRAIGHT':
-            now = self.get_clock().now().nanoseconds
             motion = MotionCommand()
             motion.steering = 0
             motion.left_speed = 150
