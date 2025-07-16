@@ -26,7 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             # 각 Python 노드 스크립트를 실행 가능한 엔트리 포인트로 등록
-            'lidar_publisher = lidar_pkg.lidar_publisher:main',
+            'lidar = lidar_pkg.lidar_publisher:main',
             'ultrasonic_publisher = lidar_pkg.ultrasonic_publisher:main',
             'parking_perception = lidar_pkg.parking_perception:main',
             'path_planner = lidar_pkg.path_planner:main',

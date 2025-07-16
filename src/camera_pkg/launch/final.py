@@ -19,7 +19,7 @@ def generate_launch_description():
             namespace='cam0',
             parameters=[
                 {'data_source': 'camera'},  # camera, video, image 선택
-                {'cam_num': 3},
+                {'cam_num': 2},
                 {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/image'},
                 {'pub_topic': '/cam0/image_raw'},
                 {'window_name': 'Raw 0'},
@@ -37,7 +37,7 @@ def generate_launch_description():
             namespace='cam1',
             parameters=[
                 {'data_source': 'camera'},  # camera, video, image 선택
-                {'cam_num': 5},
+                {'cam_num': 4},
                 {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/traffic_light'},
                 {'pub_topic': '/cam1/image_raw'},
                 {'window_name': 'Raw 0'},

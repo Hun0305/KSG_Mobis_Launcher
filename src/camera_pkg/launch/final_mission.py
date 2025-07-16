@@ -10,6 +10,37 @@ def generate_launch_description():
     cam1_model_path = "/home/sg/contest_ws/src/camera_pkg/camera_pkg/model/final.pt"
 
     return LaunchDescription([
+        
+        #################### Static TF ######################
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='laser_to_base_link',
+            arguments=[
+                '0', '0', '0',    # x, y, z 오프셋 (m)
+                '0', '0', '0',    # roll, pitch, yaw (rad)
+                'base_link',      # 부모 프레임
+                'laser_frame'     # 자식 프레임
+            ]
+        ),
+
+
+        #################### Lidar ######################
+        Node(
+                package='rplidar_ros',
+                executable='rplidar_composition',
+                name='rplidar',
+                output='screen',
+                parameters=[
+                    {'serial_port': '/dev/ttyUSB0'},
+                    {'serial_baudrate': 115200},  # A1 모델은 115200, A2/S1은 256000
+                    {'frame_id': 'laser_frame'},
+                    {'inverted': False},
+                    {'angle_compensate': True}
+                ]
+            ),
+
+        
         #################### CAMERA1(LANE) ######################
         
         Node(
@@ -18,7 +49,7 @@ def generate_launch_description():
             name='cam0',
             namespace='cam0',
             parameters=[
-                {'data_source': 'camera'},  # camera, video, image 선택
+                {'data_source': 'image'},  # camera, video, image 선택
                 {'cam_num': 3},
                 {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/image'},
                 {'pub_topic': '/cam0/image_raw'},
@@ -36,7 +67,7 @@ def generate_launch_description():
             name='cam1',
             namespace='cam1',
             parameters=[
-                {'data_source': 'camera'},  # camera, video, image 선택
+                {'data_source': 'image'},  # camera, video, image 선택
                 {'cam_num': 5},
                 {'img_dir': '/home/sg/contest_ws/src/camera_pkg/camera_pkg/lib/traffic_light'},
                 {'pub_topic': '/cam1/image_raw'},
@@ -83,6 +114,8 @@ def generate_launch_description():
                 ('detections', '/cam1/detections')  # YOLO가 감지한 결과를 detections에 퍼블리시
             ]
         ),
+
+
 
         #################### LANE DETECT ######################
         Node(
