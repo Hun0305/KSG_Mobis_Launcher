@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'motion = decision_making_pkg.motion:main',
-            'motion_mission = decision_making_pkg.motion_mission:main'
+            'motion_mission = decision_making_pkg.motion_mission:main',
+            'motion_parking = decision_making_pkg.motion_parking:main'
         ],
     },
 )

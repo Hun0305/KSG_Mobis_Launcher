@@ -7,9 +7,9 @@ def generate_launch_description():
         #################### 주차 로직 ######################
          
         Node(
-            package='lidar_pkg',
-            executable='rear_parking_fsm',
-            name='rear_parking_fsm',
+            package='decision_making_pkg',
+            executable='motion_parking',
+            name='parking',
             output='screen'
         ),
 
