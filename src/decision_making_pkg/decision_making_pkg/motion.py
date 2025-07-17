@@ -17,7 +17,7 @@ class MotionNode(Node):
 
         # 신호등 감지 설정
         self.lane1_area_threshold = 11000
-        self.lane2_area_threshold =  15000  # lane2에서 1
+        self.lane2_area_threshold =  12000  # lane2에서 1
         self.required_count = 3
 
         # 상태 변수

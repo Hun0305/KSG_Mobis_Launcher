@@ -40,10 +40,10 @@ def generate_launch_description():
         ),
 
         #################### CONTROL ######################
-        Node(
-            package='control_pkg',  
-            executable='parking_control',  
-            name='control_node',
-            output='screen'
-        )
+        # Node(
+        #     package='control_pkg',  
+        #     executable='parking_control',  
+        #     name='control_node',
+        #     output='screen'
+        # )
     ])
