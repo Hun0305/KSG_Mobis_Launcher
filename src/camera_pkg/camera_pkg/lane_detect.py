@@ -201,7 +201,7 @@ class LaneDetector(Node):
                 cv2.polylines(bev,[np.array(c_full,np.int32)],False,c_cent[idx-1],3)
 
         # Both lanes not detected
-        if all(vx==9999 for _,_,vx in infos):
+        if  not infos or all(vx==9999 for _,_,vx in infos):
             # Use last known lane
             lane_num = self.last_lane if self.last_lane is not None else 1
             angle = 0
@@ -211,6 +211,7 @@ class LaneDetector(Node):
             msg.lane_num = lane_num
             msg.vehicle_position_x = vx
             self.lane_info_pub.publish(msg)
+            self.last_lane = lane_num  # <— 이거 추가!
             self.get_logger().info(f"⚠️ No lanes detected, using last_lane={lane_num}")
             return
 

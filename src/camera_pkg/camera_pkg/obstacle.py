@@ -44,7 +44,7 @@ class ObstacleNode(Node):
         # compute central region bounds
         width = cv_img.shape[1]
         x_min = int(width * (0.5 - 0.25))
-        x_max = int(width * (0.5 + 0.5))
+        x_max = int(width * (0.5 + 0.25))
 
         # detect and publish status
         detected, area, cx_center = self.detect_obstacle(det_msg)

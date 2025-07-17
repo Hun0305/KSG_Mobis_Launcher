@@ -5,6 +5,7 @@ from std_msgs.msg import String
 from interfaces_pkg.msg import LaneInfo, MotionCommand
 from sensor_msgs.msg import LaserScan
 import re
+import math
 
 class MotionNode(Node):
     def __init__(self):
@@ -37,15 +38,24 @@ class MotionNode(Node):
 
         # Thresholds & parameters
         self.obstacle_area_threshold = 5000    # 2→1 lane change trigger
-        self.obstacle_max_area = 25000        # reverse trigger (area > this)
-        self.obstacle_min_area = 23000        # full stop upper bound
-        self.drive_start_area = 20000         # begin forward lower bound
+        self.obstacle_max_area = 15000        # 이거보다 크면 후진
+        self.obstacle_min_area = 14000        # 위에거랑 이거 사이면 정지
+        self.drive_start_area = 11000         # 이거보다 작으면 직진
 
-        # Speed parameters (tunable)
-        self.forward_min_speed = 80
-        self.forward_max_speed = 255
-        self.backward_min_speed = 60
+
+        # 1차선 물체 크기별 구간 임계값 (튜닝)
+        self.small_area_threshold  = 5000   # 이보다 작으면 “1. 정지”
+        self.medium_area_threshold = 12000   # small ≤ area < medium → “2. 직진”
+        self.large_area_threshold  = 15000  # medium ≤ area < large → “3. 정지”
+                                             # area ≥ large → “4. 후진”
+        # 직진 속도 튜닝
+        self.forward_min_speed  =  80
+        self.forward_max_speed  = 200
+
+        # 후진 속도 튜닝
+        self.backward_min_speed = 100
         self.backward_max_speed = 150
+
 
         # Traffic light parameters
         self.traffic_area_threshold = 18000
@@ -55,8 +65,8 @@ class MotionNode(Node):
         self.red_clear_counter = 0
 
         # Lane change parameters
-        self.normal_speed = 255
-        self.lane_change_speed = 200
+        self.normal_speed = 170
+        self.lane_change_speed = 170
 
         # Weights for steering adjustment
         self.angle_weight = 0.7
@@ -67,6 +77,14 @@ class MotionNode(Node):
         self.lidar_obstacle_threshold = 3
         self.obstacle_flag = False
 
+        # 라이다로 2차선에서 1차선 변경용
+        self.lidar_lane_change_counter   = 0
+        self.lidar_lane_change_threshold = 5
+
+        # 한 번만 실행됐는지 표시할 플래그
+        self.lidar_lane_change_executed    = False
+
+
         # 연속 장애물 **없음** 감지용 변수
         self.no_obstacle_counter = 0
         self.no_obstacle_threshold = 3
@@ -76,13 +94,22 @@ class MotionNode(Node):
 
     def lidar_callback(self, msg: LaserScan):
         
-        # 실제 라이다 프레임에서는 –90° 에서 –85° 로 매핑
-        start_angle = (267.5 - 360.0) * 3.141592 / 180.0   # = –90° in rad
-        end_angle   = (272.5 - 360.0) * 3.141592 / 180.0   # = –85° in rad
+        # 1차선(270° 부근) / 2차선(90° 부근)에 따라 볼 구간 설정
+        if self.current_lane == 1:
+            start_deg, end_deg = -93.0, -90.0
+            # self.get_logger().info("1")    
+        elif self.current_lane == 2:
+            start_deg, end_deg = 87.5, 92.5
+            # self.get_logger().info("2")
+        else:
+            # 차선 정보 없으면 
+            start_deg, end_deg = -93.0, -90.0
 
+        # deg → rad 변환
+        start_angle = start_deg * math.pi / 180.0
+        end_angle   = end_deg   * math.pi / 180.0
 
-        # msg.angle_min 부터 시작해서 angle_increment 만큼씩 증가
-        # 각도 → 인덱스 계산
+        # 인덱스 계산
         start_idx = int((start_angle - msg.angle_min) / msg.angle_increment)
         end_idx   = int((end_angle   - msg.angle_min) / msg.angle_increment)
 
@@ -90,12 +117,11 @@ class MotionNode(Node):
         start_idx = max(0, min(start_idx, len(msg.ranges)-1))
         end_idx   = max(0, min(end_idx,   len(msg.ranges)))
 
-        # 슬라이스
-        front_sector = msg.ranges[start_idx:end_idx]
-        # 유효한 값만
-        filtered = [r for r in front_sector if 0.0 < r < float('inf')]
+        # 범위 슬라이스 후 유효한 값만 필터링
+        sector   = msg.ranges[start_idx:end_idx]
+        filtered = [r for r in sector if 0.0 < r < float('inf')]
 
-        # 평균 계산
+        # 평균 거리 계산
         if filtered:
             self.latest_lidar_avg = sum(filtered) / len(filtered)
         else:
@@ -114,20 +140,33 @@ class MotionNode(Node):
         if self.is_changing_lane or self.ignore_obstacle_after_lane_change:
             return
 
+        
+        # 1) 2차선에서 LiDAR 연속 장애물 감지 → 1차선 변경
+        if self.current_lane == 2 and not self.lidar_lane_change_executed:
+            if self.latest_lidar_avg is not None and self.latest_lidar_avg < 1.0:
+                self.lidar_lane_change_counter += 1
+            else:
+                self.lidar_lane_change_counter = 0
+
+            if self.lidar_lane_change_counter >= self.lidar_lane_change_threshold:
+                self.target_lane = 1
+                self.is_changing_lane = True
+                self.lidar_lane_change_executed = True    # **한 번 실행 처리**
+                self.get_logger().info(
+                    f"🚧 LiDAR 장애물 {self.lidar_lane_change_threshold}회 연속 감지 "
+                    f"🔄 🔄 🔄 🔄 🔄 🔄 🔄 (avg={self.latest_lidar_avg:.2f}m) → 1차선 변경"
+                )
+                self.lidar_lane_change_counter = 0
+                return
+
+
         # 카메라 기반 장애물 메시지 파싱
         match = re.match(r'Detected:\s*(\w+),\s*Area:\s*([\d.]+)', msg.data)
         if not match:
             return
         detected = (match.group(1).lower() == 'true')
         area = float(match.group(2))
-        # self.get_logger().info(f"[Obstacle] detected={detected}, area={area}, lane={self.current_lane}")
-
-        # 2차선 → 1차선 변경 트리거 (카메라 기준)
-        if self.current_lane == 2 and detected and area > self.obstacle_area_threshold:
-            self.target_lane = 1
-            self.is_changing_lane = True
-            self.get_logger().info("🚧 2차선 큰 장애물 감지 → 목표 차선을 1번으로 변경")
-            return
+        self.get_logger().info(f"[Obstacle] detected={detected}, area={area}, lane={self.current_lane}")
 
         # 1차선에서 카메라 기반 이동 제어
         if self.current_lane == 1:
@@ -137,36 +176,61 @@ class MotionNode(Node):
 
             # 카메라 장애물 있을 때: 후진·정지·직진 결정
             if detected:
-                # 후진 구간
-                if area > self.obstacle_max_area:
+                backward_motion = False
+                forward_motion = False
+                #조향 결정
+                cmd.steering = int(max(-10, min((self.last_steering_angle/50*10)*self.angle_weight + 
+                                        -self.last_vehicle_position_x*self.position_weight, 10)))
+                # 1) 너무 작으면 정지
+                if area < self.small_area_threshold:
+                
+                    cmd.left_speed  = 0
+                    cmd.right_speed = 0
+                    self.get_logger().info(f"🟡 물체 너무 작음 (area={area}) → 정지")
+
+                 # 2) 적당하면 직진 (가까울수록 느리게, 멀수록 빠르게)
+                elif area < self.medium_area_threshold:
+                    forward_motion = True
+                    # area 가 작을수록(멀수록) ratio=1, 클수록(가까울수록) ratio=0
+                    #  norm = (area - self.small_area_threshold) / (
+                    #      self.medium_area_threshold - self.small_area_threshold
+                    #  )
+                    #  ratio = 1.0 - min(max(norm, 0.0), 1.0)
+                    #  speed = int(
+                    #      self.forward_min_speed +
+                    #      ratio * (self.forward_max_speed - self.forward_min_speed)
+                    #  )
+                    speed = 100
+                    cmd.left_speed  = speed
+                    cmd.right_speed = speed
+                    self.get_logger().info(f"🟢 적당한 물체 (area={area}) → 직진 속도 {speed}")
+                #
+                #  3) 애매하면 정지
+                elif area < self.large_area_threshold:
+                    cmd.left_speed  = 0
+                    cmd.right_speed = 0
+                    self.get_logger().info(f"🟡 애매한 크기 (area={area}) → 정지")
+
+                # 4) 너무 크면 후진
+                else:
                     backward_motion = True
+
                     cmd.steering = -int(max(-10, min((self.last_steering_angle/50*10)*self.angle_weight + 
                                         -self.last_vehicle_position_x*self.position_weight, 10)))
-                    speed = int(self.backward_min_speed + min((area - self.obstacle_max_area)/self.obstacle_max_area,1.0) * 
-                                (self.backward_max_speed - self.backward_min_speed))
-                    cmd.left_speed = -speed
-                    cmd.right_speed = -speed
-                    # self.get_logger().info(f"🔴 너무 가까움 (area={area}) → 후진 속도 {-speed}")
-                # 정지 구간
-                elif area > self.obstacle_min_area:
-                    cmd.steering = 0
-                    cmd.left_speed = 0
-                    cmd.right_speed = 0
-                    # self.get_logger().info(f"🟡 중간 거리 (area={area}) → 정지")
-                # 직진 구간
-                else:
-                    forward_motion = True
-                    ratio = 1.0 - min(area / self.drive_start_area, 1.0)
-                    speed = int(self.forward_min_speed + ratio * (self.forward_max_speed - self.forward_min_speed))
-                    cmd.steering = int(max(-10, min((self.last_steering_angle/50*10)*self.angle_weight + 
-                                        -self.last_vehicle_position_x*self.position_weight, 10)))
-                    cmd.left_speed = speed
-                    cmd.right_speed = speed
-                    # self.get_logger().info(f"🟢 작은 장애물 (area={area}) → 직진 속도 {speed}")
-            
+                    cmd.left_speed  = -100
+                    cmd.right_speed = -100
+                    self.get_logger().info(f"🔴 물체 너무 큼 (area={area})")
 
-            # 퍼블리시
+            else:
+                cmd.steering = int(max(-10, min((self.last_steering_angle/50*10)*self.angle_weight + 
+                                        -self.last_vehicle_position_x*self.position_weight, 10)))
+                cmd.left_speed  = 50
+                cmd.right_speed = 50
+                self.get_logger().info(f"🔴 물체 미감지 ")
+
+            # 커맨드 퍼블리시
             self.motion_pub.publish(cmd)
+
 
             # 후진 중 아니면 라이다 장애물 판단
             if not backward_motion:
@@ -176,7 +240,7 @@ class MotionNode(Node):
                     if self.lidar_obstacle_counter >= self.lidar_obstacle_threshold and not self.obstacle_flag:
                         self.obstacle_flag = True
                         self.get_logger().info(
-                            f"⚠️ LiDAR 장애물 감지 연속 {self.lidar_obstacle_counter}회 → obstacle_flag=True")
+                            f"🚧🚧🚧🚧🚧🚧🚧🚧🚧LiDAR 장애물 감지 연속 {self.lidar_obstacle_counter}회 → obstacle_flag=True")
                 else:
                     # 장애물 없으면 카운터 리셋
                     self.lidar_obstacle_counter = 0
@@ -195,7 +259,8 @@ class MotionNode(Node):
                 else:
                     if not (self.obstacle_flag and forward_motion):
                         self.no_obstacle_counter = 0
-
+            else: 
+                self.lidar_obstacle_counter = 0
 
     def traffic_callback(self, msg: String):
         match = re.match(r'Detected:\s*(\w+),\s*Area:\s*([\d.]+)(?:,\s*Color:\s*(\w+))?', msg.data)
@@ -248,6 +313,10 @@ class MotionNode(Node):
             cmd.steering = -10 if self.target_lane == 1 else 7
             cmd.left_speed = self.lane_change_speed
             cmd.right_speed = self.lane_change_speed
+            if self.target_lane == 1:
+                cmd.left_speed = 150
+                cmd.right_speed = 150
+
 
 
             if self.current_lane == self.target_lane and abs(self.last_vehicle_position_x) <= 30:
@@ -257,6 +326,7 @@ class MotionNode(Node):
                 self.get_logger().info(f"✅ Lane change complete: now on lane {self.current_lane}")
 
 
+        
 
         elif self.ignore_obstacle_after_lane_change:
             mapped = (self.last_steering_angle / 50.0) * 10.0 * self.angle_weight
@@ -265,10 +335,11 @@ class MotionNode(Node):
             cmd.steering = int(steering)
             cmd.left_speed = self.normal_speed
             cmd.right_speed = self.normal_speed
+            # if 
 
             if abs(steering) <= 10:
                 self.steering_stable_count += 1
-                if self.steering_stable_count >= 5:
+                if self.steering_stable_count >= 3:
                     self.ignore_obstacle_after_lane_change = False
                     self.first_lane_stabilized = True 
                     self.motion_pub.publish(cmd)
