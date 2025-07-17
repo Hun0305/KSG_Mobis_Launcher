@@ -173,12 +173,12 @@ class ParkingNode(Node):
 
     def handle_reverse_straight(self, msg: LaserScan):
         # 똑바로 후진
-        self.publish_motion_command(-70, -70, 0)
+        
         self.get_logger().info("🔁 똑바로 후진 중...")
 
         #-------------------------------------------------------
         # 라이다의 좌우에 장애물이 잡히는지를 통해
-        # 주차 완료를 확힌
+        # 주차 완료를 확힌 -> 양쪽 차량 간 거리 대략 1.3m
 
         # 왼쪽 장애물 탐지
         left_angle_min_idx = int(len(msg.ranges) * (265 / 360))
@@ -223,6 +223,15 @@ class ParkingNode(Node):
         if self.right_obstacle_state == 'passing' and self.right_obs_clear_count >= 3:
             self.right_obstacle_state = 'out'
             self.get_logger().info("🟩 우측 주차 차량 탐지 안됨")
+
+        #양쪽 차량 거리에 따라 조향 조절 
+        if abs(left_avg_distance - right_avg_distance) < 0.4:
+            steering = (left_avg_distance - right_avg_distance)
+        elif left_avg_distance < right_avg_distance:
+            steering = 3
+        else:
+            steering = -3
+        self.publish_motion_command(-70, -70, steering)
 
         # REVERSE_PAUSE 상태 전이
         if self.left_obstacle_state == 'out' and self.right_obstacle_state == 'out':
