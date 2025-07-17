@@ -20,6 +20,11 @@ class ParkingNode(Node):
         self.state = ParkingState.SEARCH # 시작 상태
         self.state_start_time = None
 
+        # -------------------------------------
+        # --- 시작위치에 따라 초기값을 꼭 조정할 것 ---
+        self.init_steer = 7 
+        # -------------------------------------
+
         self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.motion_pub = self.create_publisher(MotionCommand, 'motion_command', 10)
 
@@ -88,7 +93,7 @@ class ParkingNode(Node):
 
         elif self.obstacle_state == 'passed_second' and self.obs_clear_count >= 3:
             self.get_logger().info("🟩 두 번째 장애물 통과 - 정지")
-            self.publish_motion_command(0, 0, 30)
+            self.publish_motion_command(0, 0, self.init_steer)
             self.state = ParkingState.FIRST_STOP
             # self.get_logger().info(f"time: {self.get_clock().now().to_msg().sec} s")
             
@@ -96,7 +101,7 @@ class ParkingNode(Node):
 
         else:
             # 장애물 통과 중 직진
-            self.publish_motion_command(100, 100, 0)
+            self.publish_motion_command(100, 100, -1) # 가변저항값 조정으로 인해 -1 조향을 줘야 직진을 한다.
 
     def handle_first_stop(self, msg: LaserScan):
         self.publish_motion_command(0, 0, 30)
@@ -108,7 +113,7 @@ class ParkingNode(Node):
         
     def handle_reverse_right(self, msg: LaserScan):
         # 오른쪽으로 후진
-        self.publish_motion_command(-70, -30, 30)
+        self.publish_motion_command(-70, -30, self.init_steer)
         self.get_logger().info("🔁 오른쪽으로 후진 중...")
 
         #-------------------------------------------------------
@@ -173,7 +178,8 @@ class ParkingNode(Node):
 
     def handle_reverse_straight(self, msg: LaserScan):
         # 똑바로 후진
-        
+        # self.publish_motion_command(-70, -70, -1) # 김수경표 좌우거리 차 조정을 안쓴다면
+        steering = -1
         self.get_logger().info("🔁 똑바로 후진 중...")
 
         #-------------------------------------------------------
@@ -226,10 +232,12 @@ class ParkingNode(Node):
 
         #양쪽 차량 거리에 따라 조향 조절 
         if abs(left_avg_distance - right_avg_distance) < 0.4:
-            steering = (left_avg_distance - right_avg_distance)
+            steering = int(left_avg_distance - right_avg_distance)
         elif left_avg_distance < right_avg_distance:
+            self.get_logger().info(f"✨ 왼쪽에 치우쳐짐 - 핸들 우측으로 꺾기! 거리 차이: {left_avg_distance - right_avg_distance:.2f}m")
             steering = 3
         else:
+            self.get_logger().info(f"💡 오른쪽에 치우쳐짐 - 핸들 좌측으로 꺾기! 거리 차이: {left_avg_distance - right_avg_distance:.2f}m")
             steering = -3
         self.publish_motion_command(-70, -70, steering)
 
@@ -250,7 +258,7 @@ class ParkingNode(Node):
 
     def handle_adjust_forward(self, msg: LaserScan):
         # 탈출 직진
-        self.publish_motion_command(70, 70, 0)
+        self.publish_motion_command(70, 70, 1) # 그냥 직진할거면 -1. 우회전을 좀더 주려고 일단 1을 줘봄.
         self.get_logger().info("🔁 탈출 직진 중...")
 
         # --------------------------------------------------------
@@ -306,8 +314,8 @@ class ParkingNode(Node):
             self.get_logger().info("🟩 우측 주차 차량 탐지 안됨 - 직진 시작")
 
     def handle_go_out_straight(self, msg: LaserScan):
-        # 탈출 우회전
-        self.publish_motion_command(70, 70, 0)
+        # 탈출 직진
+        self.publish_motion_command(70, 70, -1)
 
     def publish_motion_command(self, left_speed: int, right_speed: int, steering: int):
         cmd = MotionCommand()
