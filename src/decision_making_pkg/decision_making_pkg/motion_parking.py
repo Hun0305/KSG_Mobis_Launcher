@@ -53,7 +53,7 @@ class ParkingNode(Node):
         elif self.state == ParkingState.GO_OUT_STRAIGHT:
             self.handle_go_out_straight(msg)
 
-    # 첫번째 단계, 직진
+
     def handle_search(self, msg: LaserScan):
         # 265~275도 범위 평균 거리 계산
         angle_min_idx = int(len(msg.ranges) * (95 / 360))
@@ -75,11 +75,11 @@ class ParkingNode(Node):
 
         if self.obstacle_state == 'no_obstacle' and self.obs_detect_count >= 3:
             self.obstacle_state = 'passed_first'
-            self.get_logger().info("첫 번째 장애물 감지 완료")
+            self.get_logger().info("🚧 첫 번째 장애물 감지 완료")
 
         elif self.obstacle_state == 'passed_first' and self.obs_clear_count >= 3:
             self.obstacle_state = 'between'
-            self.get_logger().info("첫 번째와 두 번째 장애물 사이")
+            self.get_logger().info("🟩 첫 번째와 두 번째 장애물 사이")
 
         elif self.obstacle_state == 'between' and self.obs_detect_count >= 3:
             self.obstacle_state = 'passed_second'
@@ -239,64 +239,6 @@ class ParkingNode(Node):
             self.get_logger().info("🔁 3초 정지 완료 → ADJUST_FORWARD 시작")
             self.state = ParkingState.ADJUST_FORWARD
 
-    # 두번째 단계, 우측 조향 후 후진
-    def handle_reverse_right(self, msg: LaserScan):
-        # 라이더 감지 영역 설정
-        right_indices = self.get_range_indices(msg, 265, 275)
-        left_indices = self.get_range_indices(msg, 85, 95)
-
-        right_detected = self.has_obstacle(msg, right_indices)
-        left_detected = self.has_obstacle(msg, left_indices)
-
-        if right_detected and left_detected:
-            self.state = ParkingState.REVERSE_STRAIGHT
-            self.get_logger().info("양쪽 장애물 감지됨 → REVERSE_STRAIGHT 상태로 전이")
-            self.publish_motion_command(0, 0, 0)
-            return
-
-        else:
-            self.publish_motion_command(-130, -130, 30)
-    
-
-    # 세번째 단계, 똑바로 후진
-    def handle_reverse_straight(self, msg: LaserScan):
-        right_indices = self.get_range_indices(msg, 265, 275)
-        left_indices = self.get_range_indices(msg, 85, 95)
-
-        right_detected = self.has_obstacle(msg, right_indices)
-        left_detected = self.has_obstacle(msg, left_indices)
-
-        if not right_detected and not left_detected:
-            self.state = ParkingState.REVERSE_PAUSE
-            self.get_logger().info("후진 완료: 양쪽 물체 감지 없음 → 3초 정지 시작 (REVERSE_PAUSE)")
-            self.publish_motion_command(0, 0, 0)
-            return
-
-        else:
-            self.publish_motion_command(-130, -130, 0)
-
-
-    # 네번째 단계, 정지
-    def handle_reverse_pause(self, msg: LaserScan):
-        now = self.get_clock().now().nanoseconds
-
-        # 정지 시작 시간 기록이 없다면 지금으로 설정
-        if self.state_start_time is None:
-            self.state_start_time = now
-            self.get_logger().info("후진 완료 후 정지 시작 (3초)")
-
-        # 3초가 지나면 다음 상태로 전이
-        elif now - self.state_start_time >= 3e9:
-            self.state = ParkingState.ADJUST_FORWARD
-            self.state_start_time = now  # 다음 상태 시작 시간 갱신
-            self.get_logger().info("3초 정지 완료 → ADJUST_FORWARD 진입")
-
-        else:
-            self.publish_motion_command(0, 0, 0)
-
-
-    # 다섯번째 단계, 똑바로 전진
-    # 오류 발생 주의점 : 처음 출발할 때 장애물이 양옆에 안잡히는 상태일터라 처음에 직진을 잘 할까? 에 대한 의문이 남아 있긴 함 > 확인 필요..
     def handle_adjust_forward(self, msg: LaserScan):
         # 탈출 직진
         self.publish_motion_command(70, 70, 0)
@@ -326,10 +268,6 @@ class ParkingNode(Node):
             self.state = ParkingState.GO_OUT_TURN
             self.get_logger().info("🟩 우측 주차 차량 탐지 안됨 - 우회전 시작")
 
-
-    # 여섯번째 단계, 우측 조향 후 전진
-    # 오류 발생 주의점 : 의외로 조금만 돌아도 라이더에 우측 차량이 잡힐 가능성이 높다고 생각함 
-    # -> 각도를 조정하거나 최악의 경우 time을 사용해 보는 것을 고려, 아니면 카메라를 사용해서 평행주차 라인을 따서 그걸 타고 나가기..?
     def handle_go_out_turn(self, msg: LaserScan):
         # 탈출 우회전
         self.publish_motion_command(50, 20, 30)
@@ -362,29 +300,6 @@ class ParkingNode(Node):
         # 탈출 우회전
         self.publish_motion_command(70, 70, 0)
 
-        else:
-            self.publish_motion_command(150, 150, 30)
-
-
-    # 일곱번째 단계, 똑바로 전진
-    def handle_go_out_straight(self, msg: LaserScan):
-        self.publish_motion_command(150, 150, 0)  
-        
-
-    def get_range_indices(self, msg, angle_start, angle_end):
-        total_len = len(msg.ranges)
-        start_idx = int((angle_start / 360.0) * total_len)
-        end_idx = int((angle_end / 360.0) * total_len)
-        return range(start_idx, end_idx)
-
-    def has_obstacle(self, msg, indices, threshold=1.5):
-        for i in indices:
-            r = msg.ranges[i]
-            if 0.05 < r < threshold:
-                return True
-        return False
-
-    # 조향 관련
     def publish_motion_command(self, left_speed: int, right_speed: int, steering: int):
         cmd = MotionCommand()
         cmd.left_speed = left_speed
